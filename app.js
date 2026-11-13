@@ -9,7 +9,7 @@ var DATA_VERSION = 1;
 
 /* data/*.json と同じ内容の内蔵コピー（file:// で開いたとき用）。正本は data/*.json。 */
 var FALLBACK_COMMENTS = {"categories":{"exp":"期待と条件","fea":"特徴","fut":"将来評価","tal":"素質評価"},"cmt":[{"c":"tal","out":"凄い素質","src":"これは凄い素質の馬ですね"},{"c":"fut","out":"いくつかのタイトルを狙える","src":"将来はいくつかのタイトルも狙えるでしょうね"},{"c":"fea","out":"スピードが付きそう","src":"スピードが付きそうな馬体ですね"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ上手くいけば三冠もあると思います"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ巧くいけば三冠もあると思います"},{"c":"fut","out":"どこに出しても恥ずかしくないとの評価","src":"これならどこに出しても恥ずかしくないでしょう"},{"c":"exp","out":"しっかり育てて活躍を期待","src":"しっかり育てて活躍してもらいましょう"},{"c":"fut","out":"期待できる","src":"期待できます"},{"c":"fea","out":"スピードが付きそうな馬体／短距離適正あり／牛嶋厩舎を推奨","src":"スピードが付きそうな馬体ですね\n短距離適正もありそうですし\n牛嶋厩舎を推奨します"},{"c":"fea","out":"強い心肺機能／八木沼厩舎でスタミナ強化","src":"強い心肺機能を備えてますね長距離馬の育成が得意な八木沼厩舎でスタミナ強化が良いでしょう"},{"c":"exp","out":"桜花賞を目標にする提案","src":"まずは桜花賞を目指しましょう"},{"c":"exp","out":"活躍時期も早そう／朝日杯フューチュリティステークスを目標に仕上げる提案","src":"活躍時期も早そうですし朝日杯フューチュリティステークスを目標に仕上げてみてはいかがでしょうか"},{"c":"fut","out":"海外も視野に入れるとの評価","src":"将来は海外も視野に入れたほうが良いでしょう"}],"cmx":[],"measure":[{"kind":"BC登録はまだ先","pattern":"BC登録はまだ先ですね"},{"kind":"完成まであと一息","pattern":"完成まであと一息でしょうか"},{"kind":"準備はできた","pattern":"準備はできたようですね"}]};
-var FALLBACK_RANKS = {"ranges":{"A":{"max":null,"min":100},"B":{"max":99,"min":85},"C":{"max":84,"min":70},"D":{"max":69,"min":55},"E":{"max":54,"min":0}},"talent":{"phrase":"これは凄い素質の馬ですね","spMin":81,"stMin":81},"title":{"phrase":"将来はいくつかのタイトルも狙えるでしょうね","sumMin":{"牝":150,"牡":160}},"warning":"参考・未検証（2018年資料由来）。現行のゲーム内境界は未確認。確定値ではない。"};
+var FALLBACK_RANKS = {"version":2,"bands":{"g1":{"max":149,"min":140,"name":"G1を狙える"},"glow":{"added":"2025-02-19","min":275,"name":"後光","note":"入厩前・上段コメント。2025年2月19日の更新で追加。","when":"入厩前・上段コメント"},"god":{"added":"2026-03","min":300,"name":"馬神","note":"2025年はGⅠ勝利後の下段コメント。2026年3月からは入厩前にも出る。入厩前の文言「この御方は馬神様の化身かもしれません 拝んでもいいですか？」","phrase":"この御方は馬神様の化身かもしれません","when":"2025年はGⅠ勝利後の下段コメント、2026年3月からは入厩前にも"},"overseas":{"max":229,"min":180,"name":"海外も視野"},"representative":{"max":249,"min":230,"name":"時代を代表"},"shogun":{"max":null,"min":250,"name":"時代を築く"},"title":{"female":{"max":179,"min":150},"male":{"max":179,"min":160},"name":"いくつかのタイトル"},"weight":{"max":139,"min":120,"name":"重賞を狙える"}},"forecastNote":"産駒予想の画面では、上段コメントは「凄い素質／海外も視野」までしか出ない。後光が出ないからといって合計275未満とは限らない。","ranges":{"A":{"max":null,"min":100},"B":{"max":99,"min":85},"C":{"max":84,"min":70},"D":{"max":69,"min":55},"E":{"max":54,"min":0}},"talent":{"phrase":"これは凄い素質の馬ですね","spMin":81,"stMin":81},"title":{"phrase":"将来はいくつかのタイトルも狙えるでしょうね","sumMin":{"牝":150,"牡":160}},"warning":"参考・未検証（ユーザー検証による推定・共有情報）。公式が数値を明示した資料は確認できていない。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認。確定値ではない。"};
 
 var COMMENTS = FALLBACK_COMMENTS;
 var RANKS = FALLBACK_RANKS;
@@ -247,6 +247,36 @@ if (t[1]!== null) s[0] = Math.max(s[0], out.sumMin - t[1]);
 if (s[1]!== null) t[0] = Math.max(t[0], out.sumMin - s[1]);
 }
 out.sp = s; out.st = t;
+/* タイトル帯・後光・馬神（ユーザー検証による推定・共有情報。参考のみ、確定ではない）。
+   合計の候補範囲 [sumLo, sumHi]（sumHi が null = 上限未確定）と重なる帯だけ出す。
+   後光・馬神は、合計範囲がその条件以上になりうる場合にだけ「なりうる（参考）」と表示し、
+   届かない場合は表示しない。確定値として表示しない。 */
+(function () {
+var sumLo = s[0] + t[0];
+var sumHi = (s[1] === null || t[1] === null) ? null : s[1] + t[1];
+out.sumLo = sumLo; out.sumHi = sumHi;
+var B = (RANKS.bands || {});
+function overlaps(lo, hi) {
+if (hi !== null && hi < sumLo) return false;
+if (sumHi !== null && lo > sumHi) return false;
+return true;
+}
+function bandText(lo, hi) { return lo + '〜' + (hi === null ? '' : hi); }
+var bands = [];
+if (B.weight && overlaps(B.weight.min, B.weight.max)) bands.push(B.weight.name + '（' + bandText(B.weight.min, B.weight.max) + '）');
+if (B.g1 && overlaps(B.g1.min, B.g1.max)) bands.push(B.g1.name + '（' + bandText(B.g1.min, B.g1.max) + '）');
+if (B.title) {
+var tb = (rec.sex === '牡') ? B.title.male : B.title.female;
+if (tb && overlaps(tb.min, tb.max)) bands.push(B.title.name + '（' + bandText(tb.min, tb.max) + '）');
+}
+if (B.overseas && overlaps(B.overseas.min, B.overseas.max)) bands.push(B.overseas.name + '（' + bandText(B.overseas.min, B.overseas.max) + '）');
+if (B.representative && overlaps(B.representative.min, B.representative.max)) bands.push(B.representative.name + '（' + bandText(B.representative.min, B.representative.max) + '）');
+if (B.shogun && overlaps(B.shogun.min, B.shogun.max)) bands.push(B.shogun.name + '（' + B.shogun.min + '以上）');
+out.bands = bands;
+out.special = [];
+if (B.glow && (sumHi === null || sumHi >= B.glow.min)) out.special.push(B.glow.name + '（SP＋ST ' + B.glow.min + '以上）の条件になりうる（参考・確定ではない）');
+if (B.god && (sumHi === null || sumHi >= B.god.min)) out.special.push(B.god.name + '（SP＋ST ' + B.god.min + '以上）の条件になりうる（参考・確定ではない）');
+})();
 out.status = out.used.length > 1? '参考条件による候補（未検証）': 'ランク条件のみ（参考）';
 out.notes.push('個別範囲内の任意の組み合わせが適合するとは限りません。実測確定値ではありません。');
 return out;
@@ -291,6 +321,10 @@ html += '<p>成長タイプ：' + esc(growthDisplay(rec)) + '（メモリの数�
 if (est.sp) {
 html += '<p>潜在SP候補（参考）：' + esc(fmtRange(est.sp)) + '<br>潜在ST候補（参考）：' + esc(fmtRange(est.st)) + '</p>';
 if (est.sumMin!== null) html += '<p>組み合わせ条件：SP＋ST≧' + est.sumMin + '</p>';
+html += '<p>SP＋ST合計の候補範囲（参考）：' + esc(fmtRange([est.sumLo, est.sumHi])) + '</p>';
+if (est.bands && est.bands.length) html += '<p>合計範囲と重なるタイトル帯（参考・未検証）：' + esc(est.bands.join('／')) + '</p>';
+if (est.special && est.special.length) html += '<p>後光・馬神（参考・可能性のみ、確定ではない）：' + esc(est.special.join('／')) + '</p>';
+if (RANKS.forecastNote) html += '<p class="note">' + esc(RANKS.forecastNote) + '</p>';
 }
 html += '<p>使った条件：' + (est.used.length? esc(est.used.join('／')): 'なし') + '</p>';
 var cats = { tal: '素質評価', fut: '将来評価', fea: '特徴', exp: '期待と条件'};
