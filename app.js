@@ -9,7 +9,7 @@ var DATA_VERSION = 1;
 
 /* data/*.json と同じ内容の内蔵コピー（file:// で開いたとき用）。正本は data/*.json。 */
 var FALLBACK_COMMENTS = {"categories":{"exp":"期待と条件","fea":"特徴","fut":"将来評価","tal":"素質評価"},"cmt":[{"c":"tal","out":"凄い素質","src":"これは凄い素質の馬ですね"},{"c":"fut","out":"いくつかのタイトルを狙える","src":"将来はいくつかのタイトルも狙えるでしょうね"},{"c":"fea","out":"スピードが付きそう","src":"スピードが付きそうな馬体ですね"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ上手くいけば三冠もあると思います"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ巧くいけば三冠もあると思います"},{"c":"fut","out":"どこに出しても恥ずかしくないとの評価","src":"これならどこに出しても恥ずかしくないでしょう"},{"c":"exp","out":"しっかり育てて活躍を期待","src":"しっかり育てて活躍してもらいましょう"},{"c":"fut","out":"期待できる","src":"期待できます"},{"c":"fea","out":"スピードが付きそうな馬体／短距離適正あり／牛嶋厩舎を推奨","src":"スピードが付きそうな馬体ですね\n短距離適正もありそうですし\n牛嶋厩舎を推奨します"},{"c":"fea","out":"強い心肺機能／八木沼厩舎でスタミナ強化","src":"強い心肺機能を備えてますね長距離馬の育成が得意な八木沼厩舎でスタミナ強化が良いでしょう"},{"c":"exp","out":"桜花賞を目標にする提案","src":"まずは桜花賞を目指しましょう"},{"c":"exp","out":"活躍時期も早そう／朝日杯フューチュリティステークスを目標に仕上げる提案","src":"活躍時期も早そうですし朝日杯フューチュリティステークスを目標に仕上げてみてはいかがでしょうか"},{"c":"fut","out":"海外も視野に入れるとの評価","src":"将来は海外も視野に入れたほうが良いでしょう"}],"cmx":[],"measure":[{"kind":"BC登録はまだ先","pattern":"BC登録はまだ先ですね"},{"kind":"完成まであと一息","pattern":"完成まであと一息でしょうか"},{"kind":"準備はできた","pattern":"準備はできたようですね"}]};
-var FALLBACK_RANKS = {"analysisStructure":{"middle":"中段はSPとSTのどちらが勝っているか（バランス）","note":"馬体解析レポートの3段構造（ユーザー検証による推定・共有情報。参考・未検証）","upper":"上段（1行目＋2〜3行目）はSP＋STの合計値（総合力）"},"bands":{"g1":{"max":149,"min":140,"name":"G1を狙える"},"glow":{"added":"2025-02-19","min":275,"name":"後光","note":"入厩前・上段コメント。2025年2月19日の更新で追加。","when":"入厩前・上段コメント"},"god":{"added":"2026-03","min":300,"name":"馬神","note":"2025年はGⅠ勝利後の下段コメント。2026年3月からは入厩前にも出る。入厩前の文言「この御方は馬神様の化身かもしれません 拝んでもいいですか？」","phrase":"この御方は馬神様の化身かもしれません","when":"2025年はGⅠ勝利後の下段コメント、2026年3月からは入厩前にも"},"overseas":{"max":229,"min":180,"name":"海外も視野"},"representative":{"max":249,"min":230,"name":"時代を代表"},"shogun":{"max":null,"min":250,"name":"時代を築く"},"title":{"female":{"max":179,"min":150},"male":{"max":179,"min":160},"name":"いくつかのタイトル"},"weight":{"max":139,"min":120,"name":"重賞を狙える"}},"bcMark":{"method":"条件を揃えた2頭を「ひとりでBC」で走らせ、印が釣り合うまで芝一杯調教の本数を増やす。才能の効果を「芝一杯◯本分」で表す。","note":"BC印比較によるスピード測定（参考情報。v1では測定機能として実装しない）。注意点：内枠優位、コースと騎手の固定（新潟など）、隠し得意距離（距離適性範囲内で特定の1距離のみスピードが高まる）、調子の固定。","target":"特別調教師才能などのスピード上昇効果"},"entryStamina":{"note":"入厩直後のスタミナは最大値（限界値）の半分という仕様があるとされる。入厩時点でスタミナDでも、育成完了時の最大スタミナがAやBに到達しうる。入厩時のSTランクだけで育成後のSTを断定しない。","rule":"入厩直後のスタミナは最大値の半分"},"forecastNote":"産駒予想の画面では、上段コメントは「凄い素質／海外も視野」までしか出ない。後光が出ないからといって合計275未満とは限らない。","ranges":{"A":{"max":null,"min":100},"B":{"max":99,"min":85},"C":{"max":84,"min":70},"D":{"max":69,"min":55},"E":{"max":54,"min":0}},"talent":{"phrase":"これは凄い素質の馬ですね","spMin":81,"stMin":81},"title":{"phrase":"将来はいくつかのタイトルも狙えるでしょうね","sumMin":{"牝":150,"牡":160}},"version":2,"warning":"参考・未検証（ユーザー検証による推定・共有情報）。公式が数値を明示した資料は確認できていない。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認。確定値ではない。"};
+var FALLBACK_RANKS = {"analysisStructure":{"middle":"中段はSPとSTのどちらが勝っているか（バランス）","note":"馬体解析レポートの3段構造（ユーザー検証による推定・共有情報。参考・未検証）","upper":"上段（1行目＋2〜3行目）はSP＋STの合計値（総合力）"},"bands":{"g1":{"max":149,"min":140,"name":"G1を狙える"},"glow":{"added":"2025-02-19","min":275,"name":"後光","note":"入厩前・上段コメント。2025年2月19日の更新で追加。","when":"入厩前・上段コメント"},"god":{"added":"2026-03","min":300,"name":"馬神","note":"2025年はGⅠ勝利後の下段コメント。2026年3月からは入厩前にも出る。入厩前の文言「この御方は馬神様の化身かもしれません 拝んでもいいですか？」","phrase":"この御方は馬神様の化身かもしれません","when":"2025年はGⅠ勝利後の下段コメント、2026年3月からは入厩前にも"},"overseas":{"max":229,"min":180,"name":"海外も視野"},"representative":{"max":249,"min":230,"name":"時代を代表"},"shogun":{"max":null,"min":250,"name":"時代を築く"},"title":{"female":{"max":179,"min":150},"male":{"max":179,"min":160},"name":"いくつかのタイトル"},"weight":{"max":139,"min":120,"name":"重賞を狙える"}},"bcMark":{"method":"条件を揃えた2頭を「ひとりでBC」で走らせ、印が釣り合うまで芝一杯調教の本数を増やす。才能の効果を「芝一杯◯本分」で表す。","note":"BC印比較によるスピード測定（参考情報。v1では測定機能として実装しない）。注意点：内枠優位、コースと騎手の固定（新潟など）、隠し得意距離（距離適性範囲内で特定の1距離のみスピードが高まる）、調子の固定。","target":"特別調教師才能などのスピード上昇効果"},"entryStamina":{"note":"入厩直後のスタミナは最大値（限界値）の半分という仕様があるとされる。入厩時点でスタミナDでも、育成完了時の最大スタミナがAやBに到達しうる。入厩時のSTランクだけで育成後のSTを断定しない。","rule":"入厩直後のスタミナは最大値の半分"},"forecastNote":"産駒予想の画面では、上段コメントは「凄い素質／海外も視野」までしか出ない。後光が出ないからといって合計275未満とは限らない。","measurementHypothesis":{"hypothesis":"スピード・スタミナ測定は、入厩前と入厩後の調教本数によるコメントの推移で行うはず（仮説・未確定）。今の最適は未確定。","needed":["解析時期（入厩前／入厩後）","調教本数","コメント文（測定用コメント3種）","SP/STランク","メモリ","解析日・週"],"note":"将来の測定に使うかもしれない記録だけを残す。数値測定の機能はまだ作らない。要らなくなったら消してよい。"},"ranges":{"A":{"max":null,"min":100},"B":{"max":99,"min":85},"C":{"max":84,"min":70},"D":{"max":69,"min":55},"E":{"max":54,"min":0}},"talent":{"phrase":"これは凄い素質の馬ですね","spMin":81,"stMin":81},"title":{"phrase":"将来はいくつかのタイトルも狙えるでしょうね","sumMin":{"牝":150,"牡":160}},"version":2,"warning":"参考・未検証（ユーザー検証による推定・共有情報）。公式が数値を明示した資料は確認できていない。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認。確定値ではない。"};
 
 var COMMENTS = FALLBACK_COMMENTS;
 var RANKS = FALLBACK_RANKS;
@@ -323,6 +323,7 @@ var est = estimate(rec);
 var html = '';
 html += '<p><strong>判定：' + esc(est.status) + '</strong></p>';
 html += '<p>成長タイプ：' + esc(growthDisplay(rec)) + '（メモリの数字＝バーの目盛り）</p>';
+if (rec.trainingCount !== null && rec.trainingCount !== undefined) html += '<p>調教本数：' + esc(String(rec.trainingCount)) + '本（将来の測定用メモ・最適は未確定）</p>';
 if (est.sp) {
 html += '<p>潜在SP候補（参考）：' + esc(fmtRange(est.sp)) + '<br>潜在ST候補（参考）：' + esc(fmtRange(est.st)) + '</p>';
 if (est.sumMin!== null) html += '<p>組み合わせ条件：SP＋ST≧' + est.sumMin + '</p>';
@@ -361,6 +362,15 @@ renderResult(currentFormRecord());
 });
 });
 }
+/* ---------- 調教本数（任意・将来の測定用メモ） ---------- */
+/* 将来のスピード・スタミナ測定に使うかもしれない記録だけ。数値測定の機能はまだ作らない。
+   最適な本数は未確定。空欄なら null（なし）として保存する。古いレコード（調教本数なし）も読める。 */
+function parseTrainingCount(v) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  var n = parseInt(v, 10);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return n;
+}
 function currentFormRecord() {
 return {
 id: $('edit-id').value || '',
@@ -381,6 +391,7 @@ physiqueRank: $('f-physique').value,
 runningStyle: $('f-running-style').value.trim(),
 distance: $('f-distance').value.trim(),
 adaptability: $('f-adaptability').value.trim(),
+trainingCount: parseTrainingCount($('f-training').value),
 doctorComment: $('f-doctor').value,
 featureComment: $('f-feature').value,
 targetRace: $('f-target').value,
@@ -408,6 +419,7 @@ li.innerHTML = '<p class="name">' + esc(r.name) + '</p>'
 + '／根性 ' + esc(r.gutsRank || '—') + '／気性 ' + esc(r.temperRank || '—') + '／体質 ' + esc(r.physiqueRank || '—')
 + ((r.runningStyle || r.distance) ? '\n脚質 ' + esc(r.runningStyle || '—') + '／距離 ' + esc(r.distance || '—') + '／適応力 ' + esc(r.adaptability || '—') : '')
 + (r.analysisTime ? '\n解析時期 ' + esc(r.analysisTime) + '（' + esc(r.analysisTab || '') + '）' : '')
++ ((r.trainingCount !== null && r.trainingCount !== undefined) ? '\n調教本数 ' + esc(String(r.trainingCount)) + '本（将来の測定用メモ）' : '')
 + (est.sp? '\n潜在SP（参考）' + esc(fmtRange(est.sp)) + '／潜在ST（参考）' + esc(fmtRange(est.st)): '')
 + (cats.length? '\n' + esc(cats.join('\n')): '')
 + (cls.unclassified.length? '\n未分類 ' + cls.unclassified.length + '件あり': '')
@@ -444,6 +456,7 @@ $('f-physique').value = r.physiqueRank || '';
 $('f-running-style').value = r.runningStyle || '';
 $('f-distance').value = r.distance || '';
 $('f-adaptability').value = r.adaptability || '';
+$('f-training').value = (r.trainingCount === null || r.trainingCount === undefined) ? '' : String(r.trainingCount);
 $('f-doctor').value = r.doctorComment || '';
 $('f-feature').value = r.featureComment || '';
 $('f-target').value = r.targetRace || '';
@@ -513,6 +526,7 @@ if (typeof r.name!== 'string' ||!r.name.trim()) return false;
 if (['牡', '牝', 'セン', '不明'].indexOf(r.sex) < 0) return false;
 if (r.growth !== undefined && ['早寄り', '早寄りの中間', '中間', '遅寄りの中間', '遅寄り', '遅寄り（最遅）', '不明'].indexOf(r.growth) < 0) return false;
 if (r.growthNum !== undefined && r.growthNum !== null && (!Number.isInteger(r.growthNum) || r.growthNum < 1 || r.growthNum > 6)) return false;
+if (r.trainingCount !== undefined && r.trainingCount !== null && (!Number.isInteger(r.trainingCount) || r.trainingCount < 0)) return false;
 if (r.spRank &&!RANKS.ranges[r.spRank]) return false;
 if (r.stRank &&!RANKS.ranges[r.stRank]) return false;
 if (r.gutsRank &&!RANKS.ranges[r.gutsRank]) return false;
