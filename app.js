@@ -129,6 +129,28 @@ var PASTE_KEYS = {
 };
 var PASTE_SECTIONS = { '博士コメント': 'doctorComment', '特徴': 'featureComment', '目標レース': 'targetRace' };
 var RANK_FIELDS = ['spRank', 'stRank', 'gutsRank', 'temperRank', 'physiqueRank'];
+
+/* ---------- 成長タイプ（メモリの数字＝バーの目盛り） ---------- */
+/* ユーザー確認（2026-11-14）：定型文の「メモリ：N」は成長タイプの数字。
+   成長タイプは6段階のバーで、1＝最も早寄り、6＝最も遅寄り。 */
+var GROWTH_WORDS = { 1: '早寄り', 2: '早寄りの中間', 3: '中間', 4: '遅寄りの中間', 5: '遅寄り', 6: '遅寄り（最遅）' };
+function growthWordFromNum(n) { return GROWTH_WORDS[n] || null; }
+function growthNumFromWord(w) {
+  var k;
+  for (k in GROWTH_WORDS) { if (GROWTH_WORDS[k] === w) return parseInt(k, 10); }
+  return null;
+}
+function growthNumOf(rec) {
+  if (rec && typeof rec.growthNum === 'number' && rec.growthNum >= 1 && rec.growthNum <= 6) return rec.growthNum;
+  return growthNumFromWord(rec ? rec.growth : null);
+}
+function growthBar(n) { return '■'.repeat(n) + '□'.repeat(6 - n); }
+function growthDisplay(rec) {
+  var n = growthNumOf(rec);
+  var w = (rec && rec.growth) || (n ? growthWordFromNum(n) : '不明');
+  if (n) return w + ' ' + n + '/6 ' + growthBar(n);
+  return w;
+}
 function parsePasted(text) {
   var out = { fields: {}, sections: {}, filled: [], missing: [] };
   var section = null;
@@ -165,14 +187,24 @@ function fillFormFromPaste() {
   if (parsed.sections.doctorComment !== undefined) $('f-doctor').value = parsed.sections.doctorComment;
   if (parsed.sections.featureComment !== undefined) $('f-feature').value = parsed.sections.featureComment;
   if (parsed.sections.targetRace !== undefined) $('f-target').value = parsed.sections.targetRace;
+  /* メモリの数字＝成長タイプの目盛り。メモリが 1〜6 なら成長タイプにも反映する */
+  if (parsed.fields.memory !== undefined) {
+    var mn = parseInt(parsed.fields.memory, 10);
+    if (mn >= 1 && mn <= 6) $('f-growth').value = growthWordFromNum(mn);
+  }
   /* 判定用のコメント欄は3つの文章をまとめたものにする（従来の分類ロジックをそのまま使う） */
   var parts = [parsed.sections.doctorComment, parsed.sections.featureComment, parsed.sections.targetRace]
     .filter(function (x) { return x; });
   if (parts.length) $('f-comment').value = parts.join('\n');
   pendingManual = [];
   var msg = parsed.filled.length ? '読み取れました：' + parsed.filled.join('、') : '読み取れる項目がありませんでした。';
+  if (parsed.fields.memory !== undefined) {
+    var mn2 = parseInt(parsed.fields.memory, 10);
+    if (mn2 >= 1 && mn2 <= 6) msg += ' 成長タイプ：' + mn2 + '/6（' + growthWordFromNum(mn2) + '）';
+  }
   if (parsed.missing.length) msg += '（読めなかった項目：' + parsed.missing.join('、') + '。手で入力してください）';
   $('paste-msg').textContent = msg;
+  updateGrowthBar();
   renderResult(currentFormRecord());
 }
 
@@ -245,12 +277,17 @@ return String(s == null? '': s).replace(/[&<>"']/g, function (c) {
 return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
 });
 }
+function updateGrowthBar() {
+  var el = $('growth-bar');
+  if (el) el.textContent = '成長タイプ：' + growthDisplay(currentFormRecord());
+}
 function renderResult(rec) {
 var box = $('result');
 var cls = classify(rec.comment || '', rec.manual || pendingManual);
 var est = estimate(rec);
 var html = '';
 html += '<p><strong>判定：' + esc(est.status) + '</strong></p>';
+html += '<p>成長タイプ：' + esc(growthDisplay(rec)) + '（メモリの数字＝バーの目盛り）</p>';
 if (est.sp) {
 html += '<p>潜在SP候補（参考）：' + esc(fmtRange(est.sp)) + '<br>潜在ST候補（参考）：' + esc(fmtRange(est.st)) + '</p>';
 if (est.sumMin!== null) html += '<p>組み合わせ条件：SP＋ST≧' + est.sumMin + '</p>';
@@ -296,6 +333,7 @@ analysisTab: $('f-analysis-tab').value.trim(),
 affiliation: $('f-affiliation').value.trim(),
 memory: $('f-memory').value.trim(),
 growth: $('f-growth').value,
+growthNum: growthNumFromWord($('f-growth').value),
 spRank: $('f-sp').value,
 stRank: $('f-st').value,
 gutsRank: $('f-guts').value,
@@ -327,7 +365,7 @@ if (cls.fut.length) cats.push('将来：' + cls.fut.join('／'));
 if (cls.fea.length) cats.push('特徴：' + cls.fea.join('／'));
 if (cls.exp.length) cats.push('期待：' + cls.exp.join('／'));
 li.innerHTML = '<p class="name">' + esc(r.name) + '</p>'
-+ '<p class="meta">' + (r.age ? '年齢 ' + esc(r.age) + '／' : '') + '性別 ' + esc(r.sex) + '／成長 ' + esc(r.growth || '不明') + '／SP ' + esc(r.spRank || '—') + '／ST ' + esc(r.stRank || '—')
++ '<p class="meta">' + (r.age ? '年齢 ' + esc(r.age) + '／' : '') + '性別 ' + esc(r.sex) + '／成長 ' + esc(growthDisplay(r)) + '／SP ' + esc(r.spRank || '—') + '／ST ' + esc(r.stRank || '—')
 + '／根性 ' + esc(r.gutsRank || '—') + '／気性 ' + esc(r.temperRank || '—') + '／体質 ' + esc(r.physiqueRank || '—')
 + ((r.runningStyle || r.distance) ? '\n脚質 ' + esc(r.runningStyle || '—') + '／距離 ' + esc(r.distance || '—') + '／適応力 ' + esc(r.adaptability || '—') : '')
 + (r.analysisTime ? '\n解析時期 ' + esc(r.analysisTime) + '（' + esc(r.analysisTab || '') + '）' : '')
@@ -358,7 +396,7 @@ $('f-analysis-time').value = r.analysisTime || '';
 $('f-analysis-tab').value = r.analysisTab || '';
 $('f-affiliation').value = r.affiliation || '';
 $('f-memory').value = r.memory || '';
-$('f-growth').value = r.growth || '不明';
+$('f-growth').value = r.growth || (r.growthNum ? growthWordFromNum(r.growthNum) : '不明');
 $('f-sp').value = r.spRank || '';
 $('f-st').value = r.stRank || '';
 $('f-guts').value = r.gutsRank || '';
@@ -375,6 +413,7 @@ $('f-memo').value = r.memo || '';
 pendingManual = (r.manual || []).slice();
 $('save-btn').textContent = '判定して更新';
 $('cancel-edit').hidden = false;
+updateGrowthBar();
 renderResult(currentFormRecord());
 window.scrollTo(0, 0);
 }
@@ -386,6 +425,7 @@ $('save-btn').textContent = '判定して登録';
 $('cancel-edit').hidden = true;
 $('form-error').textContent = '';
 $('result').innerHTML = '<p>まだ判定していません。</p>';
+updateGrowthBar();
 }
 
 $('horse-form').addEventListener('submit', function (e) {
@@ -418,13 +458,22 @@ $(id).addEventListener('change', function () { renderResult(currentFormRecord())
 
 $('paste-btn').addEventListener('click', fillFormFromPaste);
 
+/* メモリ欄に 1〜6 を手で入れたときも成長タイプに反映する */
+$('f-memory').addEventListener('input', function () {
+  var mn = parseInt($('f-memory').value, 10);
+  if (mn >= 1 && mn <= 6) $('f-growth').value = growthWordFromNum(mn);
+  updateGrowthBar();
+});
+$('f-growth').addEventListener('change', updateGrowthBar);
+
 /* ---------- JSON 書き出し・読み込み（全件置き換え・検証あり） ---------- */
 function validRecord(r) {
 if (!r || typeof r!== 'object') return false;
 if (typeof r.id!== 'string' ||!r.id) return false;
 if (typeof r.name!== 'string' ||!r.name.trim()) return false;
 if (['牡', '牝', 'セン', '不明'].indexOf(r.sex) < 0) return false;
-if (r.growth !== undefined && ['早寄り', '早寄りの中間', '中間', '遅寄りの中間', '遅寄り', '不明'].indexOf(r.growth) < 0) return false;
+if (r.growth !== undefined && ['早寄り', '早寄りの中間', '中間', '遅寄りの中間', '遅寄り', '遅寄り（最遅）', '不明'].indexOf(r.growth) < 0) return false;
+if (r.growthNum !== undefined && r.growthNum !== null && (!Number.isInteger(r.growthNum) || r.growthNum < 1 || r.growthNum > 6)) return false;
 if (r.spRank &&!RANKS.ranges[r.spRank]) return false;
 if (r.stRank &&!RANKS.ranges[r.stRank]) return false;
 if (r.gutsRank &&!RANKS.ranges[r.gutsRank]) return false;
@@ -492,4 +541,4 @@ if (pair[0] && Array.isArray(pair[0].cmt)) COMMENTS = pair[0];
 if (pair[1] && pair[1].ranges) RANKS = pair[1];
 });
 }
-loadData().then(function () { renderList();});
+loadData().then(function () { renderList(); updateGrowthBar();});

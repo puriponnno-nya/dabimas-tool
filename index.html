@@ -59,16 +59,18 @@
           <input id="f-memory" type="text" autocomplete="off" placeholder="例：2">
         </label>
       </div>
-      <label>成長タイプ（バーの数値ではなく、寄りの程度で選ぶ）
+      <label>成長タイプ（メモリの数字＝バーの目盛り 1〜6。1＝最も早寄り、6＝最も遅寄り）
         <select id="f-growth">
           <option value="不明">不明</option>
-          <option value="早寄り">早寄り</option>
-          <option value="早寄りの中間">早寄りの中間</option>
-          <option value="中間">中間</option>
-          <option value="遅寄りの中間">遅寄りの中間</option>
-          <option value="遅寄り">遅寄り</option>
+          <option value="早寄り">1/6 早寄り</option>
+          <option value="早寄りの中間">2/6 早寄りの中間</option>
+          <option value="中間">3/6 中間</option>
+          <option value="遅寄りの中間">4/6 遅寄りの中間</option>
+          <option value="遅寄り">5/6 遅寄り</option>
+          <option value="遅寄り（最遅）">6/6 遅寄り（最遅）</option>
         </select>
       </label>
+      <p class="note" id="growth-bar" role="status">成長タイプ：不明</p>
       <div class="row">
         <label>SPランク
           <select id="f-sp">
