@@ -136,6 +136,10 @@
       <label>距離適性
         <input id="f-distance" type="text" autocomplete="off" placeholder="例：1600m～3000m">
       </label>
+      <label>調教本数（任意・将来の測定用メモ）
+        <input id="f-training" type="number" min="0" step="1" autocomplete="off" placeholder="例：10">
+      </label>
+      <p class="note">調教本数は、将来のスピード・スタミナ測定に使うかもしれない記録です。最適な本数は未確定です。入れなくても登録できます。</p>
       <label>博士コメント
         <textarea id="f-doctor" rows="3" placeholder="定型文から自動で入ります"></textarea>
       </label>
@@ -182,6 +186,7 @@
   <footer>
     <p class="note">出典・ルールは <a href="./docs/rules.md">docs/rules.md</a>、仕様は <a href="./docs/spec-v2.md">docs/spec-v2.md</a> を参照。</p>
     <p class="note">スピード・スタミナの数値測定はしていません。ランク範囲と素質・タイトル・後光・馬神の条件はユーザー検証による推定・共有情報で、参考・未検証です。詳しくは docs/rules.md を見てください。</p>
+    <p class="note">BC印比較によるスピード測定は参考情報です（v1では測定機能として実装していません）。入厩直後のスタミナは最大値の半分とされるため、入厩時のSTランクだけで育成後のSTを断定しないでください。詳しくは docs/rules.md を見てください。</p>
   </footer>
 </main>
 <script src="./app.js"></script>
