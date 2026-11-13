@@ -11,7 +11,10 @@
   <h1>🐴 ダビマス能力判定 v1</h1>
   <p class="note">コメント文の貼り付け＋ランク入力で判定します。スクショOCRは後回しです。仮データのみ。保存はこの端末のブラウザ内だけです。</p>
   <p class="note">コメント文の用意：iPhoneショートカットでスクショを読み込み → Googleアプリで文字起こし → ここに貼り付け。文字起こしは完璧ではないので、正規化＋あいまい照合で分類します。合わなかった文は「未分類」に出て、手で分類できます。</p>
-  <p class="warn" role="note">ランク範囲・素質81以上・タイトル160／150・後光275以上・馬神300以上の条件は、ユーザー検証による推定・共有情報で<strong>参考・未検証</strong>です。公式が数値を明示した資料は確認できていません。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認です。確定値ではありません。スピード・スタミナの数値測定はしていません。表示するのはランクとコメントからの候補範囲（参考）のみです。</p>
+  <details class="ref-details">
+    <summary>参考・未検証の理論について（タップで開く）</summary>
+    <p class="warn" role="note">ランク範囲・素質81以上・タイトル160／150・後光275以上・馬神300以上の条件は、ユーザー検証による推定・共有情報で<strong>参考・未検証</strong>です。公式が数値を明示した資料は確認できていません。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認です。確定値ではありません。スピード・スタミナの数値測定はしていません。表示するのはランクとコメントからの候補範囲（参考）のみです。測定ツールを調教本数の理論でアップデートできるまでは、この表示は基本は非表示のままです。</p>
+  </details>
 
   <section aria-labelledby="paste-title">
     <h2 id="paste-title">📋 定型文を貼り付ける</h2>
@@ -140,6 +143,73 @@
         <input id="f-training" type="number" min="0" step="1" autocomplete="off" placeholder="例：10">
       </label>
       <p class="note">調教本数は、将来のスピード・スタミナ測定に使うかもしれない記録です。最適な本数は未確定です。入れなくても登録できます。</p>
+      <fieldset class="ml-box">
+        <legend>測定メモ（絞り込み用・任意）</legend>
+        <p class="note">1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れてください。調教本数と、変わった内容（コメント変化／スペースあり／ランク変化）を記録すると、判定結果に測定による絞り込み（参考・未検証）が出ます。数値は断定しません。</p>
+        <div class="row">
+          <label>時期（解析日・週）
+            <input id="ml-at" type="text" autocomplete="off" placeholder="例：2歳3月5週">
+          </label>
+          <label>段階
+            <select id="ml-stage">
+              <option value="">未入力</option>
+              <option value="入厩前">入厩前</option>
+              <option value="入厩後">入厩後</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>調教本数
+            <input id="ml-training" type="number" min="0" step="1" autocomplete="off" placeholder="例：16">
+          </label>
+          <label>変わった内容
+            <select id="ml-changed">
+              <option value="">未入力</option>
+              <option value="コメント変化">コメント変化</option>
+              <option value="スペースあり">スペースあり</option>
+              <option value="ランク変化">ランク変化</option>
+              <option value="その他">その他</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>SPランク
+            <select id="ml-sp">
+              <option value="">未入力</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+            </select>
+          </label>
+          <label>STランク
+            <select id="ml-st">
+              <option value="">未入力</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+            </select>
+          </label>
+        </div>
+        <label>測定用コメント
+          <select id="ml-measure">
+            <option value="">未入力</option>
+            <option value="BC登録はまだ先（スペースなし）">BC登録はまだ先ですね（スペースなし）</option>
+            <option value="BC登録は　まだ先（スペースあり）">BC登録は　まだ先ですね（スペースあり）</option>
+            <option value="完成まであと一息">完成まであと一息でしょうか</option>
+            <option value="準備はできた">準備はできたようですね</option>
+          </select>
+        </label>
+        <label>メモ
+          <input id="ml-note" type="text" autocomplete="off" placeholder="例：EからDに変わった">
+        </label>
+        <button type="button" id="ml-add">測定メモを追加</button>
+        <p id="ml-msg" role="status"></p>
+        <div id="ml-list"></div>
+      </fieldset>
       <label>博士コメント
         <textarea id="f-doctor" rows="3" placeholder="定型文から自動で入ります"></textarea>
       </label>
@@ -185,8 +255,11 @@
 
   <footer>
     <p class="note">出典・ルールは <a href="./docs/rules.md">docs/rules.md</a>、仕様は <a href="./docs/spec-v2.md">docs/spec-v2.md</a> を参照。</p>
-    <p class="note">スピード・スタミナの数値測定はしていません。ランク範囲と素質・タイトル・後光・馬神の条件はユーザー検証による推定・共有情報で、参考・未検証です。詳しくは docs/rules.md を見てください。</p>
-    <p class="note">BC印比較によるスピード測定は参考情報です（v1では測定機能として実装していません）。入厩直後のスタミナは最大値の半分とされるため、入厩時のSTランクだけで育成後のSTを断定しないでください。詳しくは docs/rules.md を見てください。</p>
+    <details class="ref-details">
+      <summary>参考・未検証の理論について（タップで開く）</summary>
+      <p class="note">スピード・スタミナの数値測定はしていません。ランク範囲と素質・タイトル・後光・馬神の条件はユーザー検証による推定・共有情報で、参考・未検証です。詳しくは docs/rules.md を見てください。</p>
+      <p class="note">BC印比較によるスピード測定は参考情報です（v1では測定機能として実装していません）。入厩直後のスタミナは最大値の半分とされるため、入厩時のSTランクだけで育成後のSTを断定しないでください。詳しくは docs/rules.md を見てください。</p>
+    </details>
   </footer>
 </main>
 <script src="./app.js"></script>

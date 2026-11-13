@@ -83,6 +83,22 @@ ul { list-style: none; padding: 0; margin: 0; }
   background: #1c2a5e; color: #dbe8ff; font-weight: bold;
 }
 .file-label input { display: none; }
+/* 参考・未検証の理論は折りたたみ式（基本は非表示）。測定ツールを調教本数の
+   理論でアップデートできるまでは、基本は非表示のまま。 */
+details.ref-details {
+  border: 1px solid #2c3f7d; border-radius: 16px; padding: 10px 14px; margin: 12px 0;
+  background: #121830;
+}
+details.ref-details summary {
+  cursor: pointer; font-size: 14px; font-weight: bold; color: #ffd34d;
+  min-height: 44px; display: flex; align-items: center;
+}
+details.ref-details[open ] summary { margin-bottom: 8px; }
+.ml-box {
+  border: 1px dashed #4a63b8; border-radius: 20px; padding: 12px 14px; margin: 12px 0;
+}
+.ml-box legend { font-size: 14px; font-weight: bold; color: #c3d2f5; padding: 0 8px; }
+#ml-msg { font-size: 14px; color: #9fe8c0; min-height: 1em; }
 section {
   background: rgba(18, 24, 48, 0.55); border: 1px solid #22305e;
   border-radius: 24px; padding: 4px 16px 16px; margin-top: 18px;
