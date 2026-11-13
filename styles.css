@@ -1,27 +1,90 @@
+/* ダビマス能力判定ツール v1 — 黒×青ベースのダークモード（可愛いめ・丸みのあるデザイン）
+   白×青は見づらいのでダークモード。著作権のあるキャラクター画像は使わない。
+   ゴールドシップ好きのイメージで、差し色にゴールドを少しだけ使う。 */
 * { box-sizing: border-box; }
-body { margin: 0; font-family: -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; font-size: 16px; line-height: 1.6; color: #222; background: #fff; }
-main { max-width: 640px; margin: 0 auto; padding: 16px; }
-h1 { font-size: 22px; margin: 8px 0; }
-h2 { font-size: 18px; margin: 24px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
-h3 { font-size: 16px; margin: 12px 0 4px; }
-.note { font-size: 13px; color: #555; }
-.warn { font-size: 13px; background: #fff8e1; border: 1px solid #e6c200; border-radius: 8px; padding: 10px; }
-.error { font-size: 13px; color: #b00020; min-height: 1em; margin: 4px 0; }
-label { display: block; margin: 0 0 12px; font-size: 14px; color: #555; }
-input[type="text"], select, textarea { width: 100%; font-size: 16px; padding: 10px; margin-top: 4px; border: 1px solid #999; border-radius: 8px; background: #fff; }
+body {
+  margin: 0;
+  font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: #eaf1ff;
+  background: #0b0e1a;
+  background-image: radial-gradient(circle at 15% 0%, #16224d 0, transparent 55%), radial-gradient(circle at 90% 10%, #1b2f66 0, transparent 45%);
+  background-attachment: fixed;
+}
+main { max-width: 640px; margin: 0 auto; padding: 18px 16px 32px; }
+h1 { font-size: 24px; margin: 10px 0 6px; color: #bcd6ff; letter-spacing: 0.03em; }
+h2 {
+  font-size: 18px; margin: 26px 0 10px; padding: 8px 14px;
+  color: #d6e6ff; background: #18224a; border-radius: 999px;
+  border: 1px solid #2c3f7d;
+}
+h3 { font-size: 16px; margin: 14px 0 4px; color: #9db9ff; }
+a { color: #8fb8ff; }
+.note { font-size: 13px; color: #aab8dd; }
+.warn {
+  font-size: 13px; color: #ffe9a8; background: #2a2305;
+  border: 1px solid #8a7414; border-radius: 16px; padding: 12px 14px;
+}
+.warn a { color: #ffd34d; }
+.error { font-size: 13px; color: #ff9db0; min-height: 1em; margin: 4px 0; }
+#paste-msg { font-size: 14px; color: #9fe8c0; min-height: 1em; }
+label { display: block; margin: 0 0 12px; font-size: 14px; color: #c3d2f5; }
+input[type="text"], select, textarea {
+  width: 100%; font-size: 16px; padding: 11px 12px; margin-top: 5px;
+  border: 1px solid #3a4f8f; border-radius: 16px;
+  background: #141a33; color: #eaf1ff;
+  font-family: inherit;
+}
+input[type="text"]::placeholder, textarea::placeholder { color: #6f7ea8; }
+input[type="text"]:focus, select:focus, textarea:focus {
+  outline: none; border-color: #6ea8ff; box-shadow: 0 0 0 3px rgba(110, 168, 255, 0.35);
+}
 textarea { white-space: pre-wrap; }
-.row { display: flex; gap: 12px; }
-.row label { flex: 1; }
-button { min-height: 48px; font-size: 16px; padding: 10px 16px; border-radius: 8px; border: 1px solid #666; background: #fff; cursor: pointer; margin: 4px 4px 4px 0; }
-button[type="submit"] { background: #1a73e8; color: #fff; border-color: #1a73e8; width: 100%; }
-button.danger { color: #b00020; border-color: #b00020; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.row label { flex: 1; min-width: 120px; }
+button {
+  min-height: 50px; font-size: 16px; font-weight: bold; font-family: inherit;
+  padding: 11px 20px; border-radius: 999px; border: 1px solid #4a63b8;
+  background: #1c2a5e; color: #dbe8ff; cursor: pointer; margin: 4px 4px 4px 0;
+}
+button:hover { background: #263873; }
+button[type="submit"] {
+  background: linear-gradient(135deg, #4d7cfe, #7aa5ff); color: #fff;
+  border-color: #7aa5ff; width: 100%;
+  box-shadow: 0 4px 14px rgba(77, 124, 254, 0.45);
+}
+#paste-btn {
+  background: linear-gradient(135deg, #b8860b, #ffd34d); color: #231a00;
+  border-color: #ffd34d;
+  box-shadow: 0 4px 14px rgba(255, 211, 77, 0.30);
+}
+button.danger { color: #ffb3c0; border-color: #8a2f45; background: #2a1220; }
 ul { list-style: none; padding: 0; margin: 0; }
-#horse-list li { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin: 0 0 10px; }
-#horse-list .name { font-weight: bold; font-size: 17px; }
-#horse-list .meta { font-size: 14px; color: #555; white-space: pre-line; }
-#result { border: 1px solid #ccc; border-radius: 8px; padding: 12px; }
+#horse-list li {
+  border: 1px solid #2c3f7d; border-radius: 20px; padding: 14px;
+  margin: 0 0 12px; background: #121830;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+#horse-list .name { font-weight: bold; font-size: 18px; color: #cfe0ff; }
+#horse-list .meta { font-size: 14px; color: #aab8dd; white-space: pre-line; }
+#result {
+  border: 1px solid #2c3f7d; border-radius: 20px; padding: 14px;
+  background: #121830;
+}
 #result p { margin: 4px 0; white-space: pre-line; }
 #result ul { list-style: disc; padding-left: 20px; }
-.file-label { display: inline-block; border: 1px solid #666; border-radius: 8px; padding: 10px 16px; min-height: 48px; cursor: pointer; }
+.manual-row {
+  border: 1px dashed #4a63b8; border-radius: 16px; padding: 10px 12px; margin: 8px 0;
+}
+.file-label {
+  display: inline-block; border: 1px solid #4a63b8; border-radius: 999px;
+  padding: 11px 20px; min-height: 50px; cursor: pointer;
+  background: #1c2a5e; color: #dbe8ff; font-weight: bold;
+}
 .file-label input { display: none; }
-footer { margin-top: 24px; }
+section {
+  background: rgba(18, 24, 48, 0.55); border: 1px solid #22305e;
+  border-radius: 24px; padding: 4px 16px 16px; margin-top: 18px;
+}
+footer { margin-top: 26px; }

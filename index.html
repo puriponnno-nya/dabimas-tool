@@ -8,10 +8,20 @@
 </head>
 <body>
 <main>
-  <h1>ダビマス能力判定 v1</h1>
+  <h1>🐴 ダビマス能力判定 v1</h1>
   <p class="note">コメント文の貼り付け＋ランク入力で判定します。スクショOCRは後回しです。仮データのみ。保存はこの端末のブラウザ内だけです。</p>
   <p class="note">コメント文の用意：iPhoneショートカットでスクショを読み込み → Googleアプリで文字起こし → ここに貼り付け。文字起こしは完璧ではないので、正規化＋あいまい照合で分類します。合わなかった文は「未分類」に出て、手で分類できます。</p>
-  <p class="warn" role="note">ランク範囲・素質81以上・タイトル160／150の条件は、2018年資料由来の<strong>参考・未検証</strong>です。確定値ではありません。</p>
+  <p class="warn" role="note">ランク範囲・素質81以上・タイトル160／150の条件は、2018年資料（<a href="https://dbmsmemo.blogspot.com/2018/02/blog-post_20.html">dbmsmemo.blogspot.com/2018/02/blog-post_20.html</a>）由来の<strong>参考・未検証</strong>です。確定値ではありません。スピード・スタミナの数値測定はしていません。表示するのはランクとコメントからの候補範囲（参考）のみです。</p>
+
+  <section aria-labelledby="paste-title">
+    <h2 id="paste-title">📋 定型文を貼り付ける</h2>
+    <p class="note">馬体解析の定型文をまるごと貼ると、馬名・ランク・コメントを自動で読み取って下のフォームに入れます。読み取れなかった項目は空欄のままなので、手で入れてください。</p>
+    <label>定型文
+      <textarea id="paste-text" rows="8" placeholder="例：&#10;馬名：テストウマ&#10;年齢：0歳&#10;スピード：A&#10;スタミナ：B&#10;博士コメント：&#10;これは凄い素質の馬ですね"></textarea>
+    </label>
+    <button type="button" id="paste-btn">✨ 定型文から読み取る</button>
+    <p id="paste-msg" role="status"></p>
+  </section>
 
   <section aria-labelledby="form-title">
     <h2 id="form-title">馬を登録・編集する</h2>
@@ -20,14 +30,35 @@
       <label>馬名（必須）
         <input id="f-name" type="text" autocomplete="off" placeholder="例：テストウマ">
       </label>
-      <label>性別
-        <select id="f-sex">
-          <option value="不明">不明</option>
-          <option value="牡">牡</option>
-          <option value="牝">牝</option>
-          <option value="セン">セン</option>
-        </select>
-      </label>
+      <div class="row">
+        <label>年齢
+          <input id="f-age" type="text" autocomplete="off" placeholder="例：0歳">
+        </label>
+        <label>性別
+          <select id="f-sex">
+            <option value="不明">不明</option>
+            <option value="牡">牡</option>
+            <option value="牝">牝</option>
+            <option value="セン">セン</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>解析時期
+          <input id="f-analysis-time" type="text" autocomplete="off" placeholder="例：0歳 3月 5週">
+        </label>
+        <label>解析タブ
+          <input id="f-analysis-tab" type="text" autocomplete="off" placeholder="例：入厩前">
+        </label>
+      </div>
+      <div class="row">
+        <label>解析時所属
+          <input id="f-affiliation" type="text" autocomplete="off" placeholder="例：未入厩">
+        </label>
+        <label>メモリ
+          <input id="f-memory" type="text" autocomplete="off" placeholder="例：2">
+        </label>
+      </div>
       <label>成長タイプ（バーの数値ではなく、寄りの程度で選ぶ）
         <select id="f-growth">
           <option value="不明">不明</option>
@@ -60,6 +91,58 @@
           </select>
         </label>
       </div>
+      <div class="row">
+        <label>根性ランク
+          <select id="f-guts">
+            <option value="">未入力</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+            <option value="E">E</option>
+          </select>
+        </label>
+        <label>気性ランク
+          <select id="f-temper">
+            <option value="">未入力</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+            <option value="E">E</option>
+          </select>
+        </label>
+        <label>体質ランク
+          <select id="f-physique">
+            <option value="">未入力</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+            <option value="E">E</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>脚質
+          <input id="f-running-style" type="text" autocomplete="off" placeholder="例：追込">
+        </label>
+        <label>適応力
+          <input id="f-adaptability" type="text" autocomplete="off" placeholder="例：D">
+        </label>
+      </div>
+      <label>距離適性
+        <input id="f-distance" type="text" autocomplete="off" placeholder="例：1600m～3000m">
+      </label>
+      <label>博士コメント
+        <textarea id="f-doctor" rows="3" placeholder="定型文から自動で入ります"></textarea>
+      </label>
+      <label>特徴
+        <textarea id="f-feature" rows="3" placeholder="定型文から自動で入ります"></textarea>
+      </label>
+      <label>目標レース
+        <textarea id="f-target" rows="3" placeholder="定型文から自動で入ります"></textarea>
+      </label>
       <label>コメント文（文字起こし文を貼り付け。ショートカット→Googleアプリで文字起こしした文）
         <textarea id="f-comment" rows="5" placeholder="例：これは凄い素質の馬ですね&#10;将来はいくつかのタイトルも狙えるでしょうね"></textarea>
       </label>
@@ -96,6 +179,7 @@
 
   <footer>
     <p class="note">出典・ルールは <a href="./docs/rules.md">docs/rules.md</a>、仕様は <a href="./docs/spec-v2.md">docs/spec-v2.md</a> を参照。</p>
+    <p class="note">スピード・スタミナの数値測定はしていません。ランク範囲と素質・タイトル条件は2018年資料（https://dbmsmemo.blogspot.com/2018/02/blog-post_20.html）由来の参考・未検証です。</p>
   </footer>
 </main>
 <script src="./app.js"></script>

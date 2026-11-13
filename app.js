@@ -18,7 +18,8 @@ var RANKS = FALLBACK_RANKS;
 /* よくある文字起こしのゆらぎを吸収する置換表（原文の意味を変えない範囲で） */
 var ALIASES = [
 ['凄い', 'すごい'], ['凄', 'すご'], ['巧い', '上手い'], ['巧く', '上手く'],
-['厩舎', 'きゅうしゃ'], ['馬体', 'ばたい'], ['心肺機能', 'しんぱいきのう']
+['厩舎', 'きゅうしゃ'], ['馬体', 'ばたい'], ['心肺機能', 'しんぱいきのう'],
+['適性', '適正']
 ];
 function cmNorm(s) {
 var t = String(s || '').normalize('NFKC');
@@ -112,6 +113,69 @@ i++;
 }
 return res;
 }
+
+/* ---------- 定型文の読み取り ---------- */
+/* ユーザーが貼る定型文（例）：
+   馬名：テストウマ／年齢：0歳／解析時期：0歳 3月 5週／解析タブ：入厩前
+   解析時所属：未入厩／スピード：A／スタミナ：B／根性：B／気性：C／体質：B
+   メモリ：2／脚質：追込／距離適性：1600m～3000m／適応力：D
+   博士コメント：／特徴：／目標レース： の3つの見出し以降は複数行の文章。
+   全角・半角の「：」「:」どちらでも読む。読み取れなかった項目は空欄のまま。 */
+var PASTE_KEYS = {
+  '馬名': 'name', '年齢': 'age', '解析時期': 'analysisTime', '解析タブ': 'analysisTab',
+  '解析時所属': 'affiliation', 'スピード': 'spRank', 'スタミナ': 'stRank',
+  '根性': 'gutsRank', '気性': 'temperRank', '体質': 'physiqueRank',
+  'メモリ': 'memory', '脚質': 'runningStyle', '距離適性': 'distance', '適応力': 'adaptability'
+};
+var PASTE_SECTIONS = { '博士コメント': 'doctorComment', '特徴': 'featureComment', '目標レース': 'targetRace' };
+var RANK_FIELDS = ['spRank', 'stRank', 'gutsRank', 'temperRank', 'physiqueRank'];
+function parsePasted(text) {
+  var out = { fields: {}, sections: {}, filled: [], missing: [] };
+  var section = null;
+  String(text || '').split(/\r?\n/).forEach(function (rawLine) {
+    var line = rawLine.trim();
+    if (!line) return;
+    var m = line.match(/^([^：:]+)[：:]\s*(.*)$/);
+    if (m) {
+      var key = m[1].trim(), val = m[2].trim();
+      if (PASTE_SECTIONS[key]) { section = PASTE_SECTIONS[key]; out.sections[section] = val ? [val] : []; return; }
+      if (PASTE_KEYS[key]) {
+        section = null;
+        var field = PASTE_KEYS[key];
+        if (RANK_FIELDS.indexOf(field) >= 0 && !/^[A-E]$/.test(val)) { out.missing.push(key); return; }
+        out.fields[field] = val;
+        out.filled.push(key);
+        return;
+      }
+    }
+    if (section) { out.sections[section].push(line); }
+  });
+  Object.keys(out.sections).forEach(function (k) { out.sections[k] = out.sections[k].join('\n'); });
+  return out;
+}
+function fillFormFromPaste() {
+  var parsed = parsePasted($('paste-text').value);
+  var map = {
+    name: 'f-name', age: 'f-age', analysisTime: 'f-analysis-time', analysisTab: 'f-analysis-tab',
+    affiliation: 'f-affiliation', memory: 'f-memory', runningStyle: 'f-running-style',
+    distance: 'f-distance', adaptability: 'f-adaptability',
+    spRank: 'f-sp', stRank: 'f-st', gutsRank: 'f-guts', temperRank: 'f-temper', physiqueRank: 'f-physique'
+  };
+  Object.keys(parsed.fields).forEach(function (f) { if ($(map[f])) $(map[f]).value = parsed.fields[f]; });
+  if (parsed.sections.doctorComment !== undefined) $('f-doctor').value = parsed.sections.doctorComment;
+  if (parsed.sections.featureComment !== undefined) $('f-feature').value = parsed.sections.featureComment;
+  if (parsed.sections.targetRace !== undefined) $('f-target').value = parsed.sections.targetRace;
+  /* 判定用のコメント欄は3つの文章をまとめたものにする（従来の分類ロジックをそのまま使う） */
+  var parts = [parsed.sections.doctorComment, parsed.sections.featureComment, parsed.sections.targetRace]
+    .filter(function (x) { return x; });
+  if (parts.length) $('f-comment').value = parts.join('\n');
+  pendingManual = [];
+  var msg = parsed.filled.length ? '読み取れました：' + parsed.filled.join('、') : '読み取れる項目がありませんでした。';
+  if (parsed.missing.length) msg += '（読めなかった項目：' + parsed.missing.join('、') + '。手で入力してください）';
+  $('paste-msg').textContent = msg;
+  renderResult(currentFormRecord());
+}
+
 /* 素質・タイトル文の有無（あいまい照合：正規化して部分一致） */
 function containsPhrase(text, phrase) {
 var n = cmNorm(text), p = cmNorm(phrase);
@@ -225,10 +289,24 @@ function currentFormRecord() {
 return {
 id: $('edit-id').value || '',
 name: $('f-name').value.trim(),
+age: $('f-age').value.trim(),
 sex: $('f-sex').value,
+analysisTime: $('f-analysis-time').value.trim(),
+analysisTab: $('f-analysis-tab').value.trim(),
+affiliation: $('f-affiliation').value.trim(),
+memory: $('f-memory').value.trim(),
 growth: $('f-growth').value,
 spRank: $('f-sp').value,
 stRank: $('f-st').value,
+gutsRank: $('f-guts').value,
+temperRank: $('f-temper').value,
+physiqueRank: $('f-physique').value,
+runningStyle: $('f-running-style').value.trim(),
+distance: $('f-distance').value.trim(),
+adaptability: $('f-adaptability').value.trim(),
+doctorComment: $('f-doctor').value,
+featureComment: $('f-feature').value,
+targetRace: $('f-target').value,
 comment: $('f-comment').value,
 memo: $('f-memo').value.trim(),
 manual: pendingManual.slice()
@@ -249,7 +327,10 @@ if (cls.fut.length) cats.push('将来：' + cls.fut.join('／'));
 if (cls.fea.length) cats.push('特徴：' + cls.fea.join('／'));
 if (cls.exp.length) cats.push('期待：' + cls.exp.join('／'));
 li.innerHTML = '<p class="name">' + esc(r.name) + '</p>'
-+ '<p class="meta">性別 ' + esc(r.sex) + '／成長 ' + esc(r.growth || '不明') + '／SP ' + esc(r.spRank || '—') + '／ST ' + esc(r.stRank || '—')
++ '<p class="meta">' + (r.age ? '年齢 ' + esc(r.age) + '／' : '') + '性別 ' + esc(r.sex) + '／成長 ' + esc(r.growth || '不明') + '／SP ' + esc(r.spRank || '—') + '／ST ' + esc(r.stRank || '—')
++ '／根性 ' + esc(r.gutsRank || '—') + '／気性 ' + esc(r.temperRank || '—') + '／体質 ' + esc(r.physiqueRank || '—')
++ ((r.runningStyle || r.distance) ? '\n脚質 ' + esc(r.runningStyle || '—') + '／距離 ' + esc(r.distance || '—') + '／適応力 ' + esc(r.adaptability || '—') : '')
++ (r.analysisTime ? '\n解析時期 ' + esc(r.analysisTime) + '（' + esc(r.analysisTab || '') + '）' : '')
 + (est.sp? '\n潜在SP（参考）' + esc(fmtRange(est.sp)) + '／潜在ST（参考）' + esc(fmtRange(est.st)): '')
 + (cats.length? '\n' + esc(cats.join('\n')): '')
 + (cls.unclassified.length? '\n未分類 ' + cls.unclassified.length + '件あり': '')
@@ -271,10 +352,24 @@ ul.appendChild(li);
 function loadIntoForm(r) {
 $('edit-id').value = r.id;
 $('f-name').value = r.name;
+$('f-age').value = r.age || '';
 $('f-sex').value = r.sex;
+$('f-analysis-time').value = r.analysisTime || '';
+$('f-analysis-tab').value = r.analysisTab || '';
+$('f-affiliation').value = r.affiliation || '';
+$('f-memory').value = r.memory || '';
 $('f-growth').value = r.growth || '不明';
 $('f-sp').value = r.spRank || '';
 $('f-st').value = r.stRank || '';
+$('f-guts').value = r.gutsRank || '';
+$('f-temper').value = r.temperRank || '';
+$('f-physique').value = r.physiqueRank || '';
+$('f-running-style').value = r.runningStyle || '';
+$('f-distance').value = r.distance || '';
+$('f-adaptability').value = r.adaptability || '';
+$('f-doctor').value = r.doctorComment || '';
+$('f-feature').value = r.featureComment || '';
+$('f-target').value = r.targetRace || '';
 $('f-comment').value = r.comment || '';
 $('f-memo').value = r.memo || '';
 pendingManual = (r.manual || []).slice();
@@ -321,6 +416,8 @@ $('f-comment').addEventListener('input', function () { pendingManual = []; rende
 $(id).addEventListener('change', function () { renderResult(currentFormRecord());});
 });
 
+$('paste-btn').addEventListener('click', fillFormFromPaste);
+
 /* ---------- JSON 書き出し・読み込み（全件置き換え・検証あり） ---------- */
 function validRecord(r) {
 if (!r || typeof r!== 'object') return false;
@@ -330,6 +427,13 @@ if (['牡', '牝', 'セン', '不明'].indexOf(r.sex) < 0) return false;
 if (r.growth !== undefined && ['早寄り', '早寄りの中間', '中間', '遅寄りの中間', '遅寄り', '不明'].indexOf(r.growth) < 0) return false;
 if (r.spRank &&!RANKS.ranges[r.spRank]) return false;
 if (r.stRank &&!RANKS.ranges[r.stRank]) return false;
+if (r.gutsRank &&!RANKS.ranges[r.gutsRank]) return false;
+if (r.temperRank &&!RANKS.ranges[r.temperRank]) return false;
+if (r.physiqueRank &&!RANKS.ranges[r.physiqueRank]) return false;
+var optText = ['age', 'analysisTime', 'analysisTab', 'affiliation', 'memory', 'runningStyle', 'distance', 'adaptability', 'doctorComment', 'featureComment', 'targetRace'];
+for (var j = 0; j < optText.length; j++) {
+if (r[optText[j]] !== undefined && typeof r[optText[j]] !== 'string') return false;
+}
 if (typeof r.comment!== 'string' || typeof r.memo!== 'string') return false;
 if (r.manual!== undefined) {
 if (!Array.isArray(r.manual)) return false;
