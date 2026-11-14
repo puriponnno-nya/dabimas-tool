@@ -48,6 +48,7 @@
    - 保存はブラウザ localStorage、馬データとは別のキー `dabimas-breeding-v1`
    - JSON書き出し・読み込みに繁殖計画も含める。繁殖計画のない旧形式のJSONも読み込める（その場合は既存の繁殖計画は残る）。不正な繁殖計画は拒否し、既存データは変えない
    - 配合のシミュレーション・血統図・配合効果の表示はしない。未確定の配合効果を断定表示しない
+   - 参考リンク（外部サイトへのリンクだけ。データのコピーや取り込みはしない）：たかなさんの紹介記事 https://note.com/takana_mmdd/n/nff464f9f1292、DBMS SP/STチェッカー https://takana666.github.io/DBMS_SPST_checker/、至高種・組合せ検索 https://takana666.github.io/DBMS_shikou_checker/、たかなさんのX https://x.com/mmmmdd_tw。データはたかなさんのもので毎週金曜夜にダビマス全書から自動取得。リンク先が使えなくなる可能性があり、いずれ自作で同じ機能を入れる予定
 
 ## 対象外（v1）
 
