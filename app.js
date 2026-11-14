@@ -829,8 +829,195 @@ function renderStallionDetail(idx) {
     + (h.eff ? '<br>発揮効果（先頭のみ・参考）：' + esc(h.eff) : '')
     + (link ? '<br><a href="' + esc(link) + '" target="_blank" rel="noopener">ダビマス全書で見る</a>' : '') + '</p>'
     + '<table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>子系統</th><th>因子</th></tr></thead><tbody>' + rows + '</tbody></table>'
-    + '<p class="note">配合の効果を断定する表示はしません。血統・因子・非凡・天性の表示だけです。配合理論の判定は後のステップです。</p>';
+    + '<p class="note">配合の効果を断定する表示はしません。血統・因子・非凡・天性の表示だけです。配合理論の確認は、繁殖計画で父馬・母馬の両方をDBから選ぶと表示できます。</p>';
   box.scrollIntoView();
+}
+
+/* ---------- 子の血統・配合理論の確認（ステップ3） ---------- */
+/* すべて参考・未検証。ユーザー攻略記事による推定・共有情報で、公式仕様では
+   ない。配合の効果を断定する表示はしない。出典：Appliv Games
+   「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」
+   https://games.app-liv.jp/archives/232008
+   「ダビマス 配合のポイント（インブリード／血統表の見方）」
+   https://games.app-liv.jp/archives/198428
+   完璧な配合の条件：dbms-go.net「完璧な配合」
+   https://dbms-go.net/配合解説/完璧な配合/
+   判定に使う親系統は anc の2番目の要素。親系統が空の祖先は無視する
+   （数えない）。空欄はデータ上は今のところないが、念のための扱い。 */
+var CHILD_PEDIGREE_LABELS = ['父', '父父', '父父父', '父父父父', '父父母父', '父母父', '父母父父', '父母母父', '母父', '母父父', '母父父父', '母父母父', '母母父', '母母父父', '母母母父'];
+/* 子の血統15位置の世代（父・母＝1代）。 */
+var CHILD_PEDIGREE_GEN = [1, 2, 3, 4, 4, 3, 4, 4, 2, 3, 4, 4, 3, 4, 4];
+/* 子の位置 i（1〜14）が父馬・母馬の anc の何番目から来るか。
+   父方（1〜7）：父馬 anc[0,1,2,5,8,9,12]、母方（8〜14）：母馬 anc[0,1,2,5,8,9,12]。
+   位置 0（父）は父馬そのもの。母は子の血統15位置には入らない
+   （anc は父系の祖先だけの並びのため）が、子の母として別に表示する。 */
+var CHILD_PEDIGREE_SRC = [null, 0, 1, 2, 5, 8, 9, 12, 0, 1, 2, 5, 8, 9, 12];
+/* 計画が父馬・母馬の両方をDB検索から選んでいるか。 */
+function planHasDbPair(p) {
+  return !!(p && p.sireDbIndex !== null && p.sireDbIndex !== undefined &&
+    p.damDbIndex !== null && p.damDbIndex !== undefined);
+}
+/* 馬名→データベース内の番号（先頭の1件）。祖先名がDBにあるかの確認用。 */
+var stallionNameIndexCache = null;
+function stallionNameToIndex() {
+  if (stallionNameIndexCache) return stallionNameIndexCache;
+  var m = {};
+  if (!STALLIONS || !Array.isArray(STALLIONS.horses)) return m;
+  STALLIONS.horses.forEach(function (h, idx) { if (h.n && m[h.n] === undefined) m[h.n] = idx; });
+  stallionNameIndexCache = m;
+  return m;
+}
+/* 子の血統15位置を組み立てる。返り値は15件の
+   {label, name, pa, chi, f1, f2, side, gen}。side は 'sire'／'dam'。 */
+function buildChildPedigree(sire, dam) {
+  if (!sire || !dam) return null;
+  var rows = [];
+  for (var i = 0; i < 15; i++) {
+    if (i === 0) {
+      rows.push({ label: '父', name: sire.n || '', pa: '', chi: '', f1: '', f2: '', side: 'sire', gen: 1 });
+      continue;
+    }
+    var src = (i < 8) ? sire : dam;
+    var a = stallionAncestor(src, CHILD_PEDIGREE_SRC[i]);
+    rows.push({ label: CHILD_PEDIGREE_LABELS[i], name: a.name, pa: a.pa, chi: a.chi, f1: a.f1, f2: a.f2, side: (i < 8) ? 'sire' : 'dam', gen: CHILD_PEDIGREE_GEN[i] });
+  }
+  return rows;
+}
+/* インブリード判定用の両サイドの位置一覧。父方＝子の父（1代）と父馬由来の
+   7位置、母方＝子の母（1代）と母馬由来の7位置。 */
+function childPedigreeSides(sire, dam) {
+  var rows = buildChildPedigree(sire, dam);
+  if (!rows) return null;
+  var damHead = { label: '母', name: dam.n || '', pa: '', chi: '', f1: '', f2: '', side: 'dam', gen: 1 };
+  return { sireSide: rows.slice(0, 8), damSide: [damHead].concat(rows.slice(8)) };
+}
+/* 両方に出る同じ祖先名を一覧にする。返り値は
+   [{name, pairs: [{sireLabel, sireGen, damLabel, damGen}], f1, f2}]。
+   因子は、その祖先の anc の因子1・因子2（分かるもの）。 */
+function findInbreeding(sire, dam) {
+  var sides = childPedigreeSides(sire, dam);
+  if (!sides) return [];
+  var byName = {};
+  function add(p, side) {
+    if (!p.name) return;
+    var e = byName[p.name];
+    if (!e) { e = { name: p.name, sire: [], dam: [], f1: '', f2: '' }; byName[p.name] = e; }
+    e[side].push(p);
+    if (!e.f1 && p.f1) e.f1 = p.f1;
+    if (!e.f2 && p.f2) e.f2 = p.f2;
+  }
+  sides.sireSide.forEach(function (p) { add(p, 'sire'); });
+  sides.damSide.forEach(function (p) { add(p, 'dam'); });
+  var out = [];
+  Object.keys(byName).forEach(function (name) {
+    var e = byName[name];
+    if (!e.sire.length || !e.dam.length) return;
+    var pairs = [];
+    e.sire.forEach(function (s) {
+      e.dam.forEach(function (d) {
+        pairs.push({ sireLabel: s.label, sireGen: s.gen, damLabel: d.label, damGen: d.gen });
+      });
+    });
+    pairs.sort(function (a, b) { return (a.sireGen - b.sireGen) || (a.damGen - b.damGen); });
+    out.push({ name: name, pairs: pairs, f1: e.f1, f2: e.f2 });
+  });
+  out.sort(function (a, b) { return (a.pairs[0].sireGen + a.pairs[0].damGen) - (b.pairs[0].sireGen + b.pairs[0].damGen); });
+  return out;
+}
+/* 親系統の多重集合が並べ替えで一致するか。 */
+function sameMultiset(a, b) {
+  var sa = a.slice().sort(), sb = b.slice().sort();
+  if (sa.length !== sb.length) return false;
+  for (var i = 0; i < sa.length; i++) { if (sa[i] !== sb[i]) return false; }
+  return true;
+}
+function distinctKinds(list) {
+  var out = [];
+  list.forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); });
+  return out;
+}
+/* 配合理論の判定（すべて参考・未検証。断定しない）。
+   面白い配合：父馬・母馬それぞれの 父(anc0)・父母父(anc5)・母父(anc8)・
+     母母父(anc12) の計8頭の親系統（空は除く）の種類数が7種類以上。
+   見事な配合：父馬の 父父母父(anc4)・父母母父(anc7)・母父母父(anc11)・
+     母母母父(anc14) の4頭の親系統の多重集合と、母馬の 父(anc0)・父母父(anc5)・
+     母父(anc8)・母母父(anc12) の4頭の親系統の多重集合が、並べ替えで一致。
+     空の親系統は除いて比べ、除いたあと両方が空でない場合だけ成立とする。
+   よくできた配合：上記2つの4頭集合の、共通する親系統の種類数が3種類以上で、
+     見事な配合でない場合。
+   完璧な配合：見事＋面白いの同時成立だけでは断定できない（種牡馬自身が
+     面白い配合であることも必要とする説明があり、未確認のため）。判定しない。
+   至高の配合：この機能では判定しない（未確認）。危険な配合：根拠が不確かな
+   ので判定しない。 */
+function checkMatingTheories(sire, dam) {
+  if (!sire || !dam) return null;
+  function paList(h, idxs) { return idxs.map(function (i) { return stallionAncestor(h, i).pa; }); }
+  var eight = paList(sire, [0, 5, 8, 12]).concat(paList(dam, [0, 5, 8, 12]));
+  var eightKinds = distinctKinds(eight);
+  var omoshiroi = eightKinds.length >= 7;
+  var sireSet4 = distinctKinds(paList(sire, [4, 7, 11, 14]).filter(function (x) { return x; }));
+  var sireSet4Multi = paList(sire, [4, 7, 11, 14]).filter(function (x) { return x; });
+  var damSet4Multi = paList(dam, [0, 5, 8, 12]).filter(function (x) { return x; });
+  var migoto = sireSet4Multi.length > 0 && damSet4Multi.length > 0 && sameMultiset(sireSet4Multi, damSet4Multi);
+  var commonKinds = distinctKinds(sireSet4Multi).filter(function (x) { return distinctKinds(damSet4Multi).indexOf(x) >= 0; });
+  var yokudekita = !migoto && commonKinds.length >= 3;
+  return {
+    omoshiroi: { hit: omoshiroi, distinctCount: eightKinds.length, kinds: eightKinds },
+    migoto: { hit: migoto, sireKinds: sireSet4Multi, damKinds: damSet4Multi },
+    yokudekita: { hit: yokudekita, commonCount: commonKinds.length, commonKinds: commonKinds },
+    perfectLookalike: omoshiroi && migoto,
+    anyHit: omoshiroi || migoto || yokudekita
+  };
+}
+/* 子の血統・配合理論の確認の表示（折りたたみ・既定は閉じる）。 */
+function buildChildPedigreeHtml(sire, dam) {
+  var rows = buildChildPedigree(sire, dam);
+  if (!rows) return '';
+  var nameToIdx = stallionNameToIndex();
+  var html = '<details class="ref-details"><summary>子の血統・配合理論を見る（参考・未検証）</summary>';
+  html += '<p>子の父：' + esc(sire.n || '') + ' ／ 子の母：' + esc(dam.n || '') + '</p>';
+  html += '<h4>子の血統表（5代・参考）</h4><table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>因子</th><th>DB</th></tr></thead><tbody>';
+  rows.forEach(function (r) {
+    var idx = (r.name && nameToIdx[r.name] !== undefined) ? nameToIdx[r.name] : null;
+    html += '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.name || '—') + '</td><td>' + esc(r.pa || '—') + '</td><td>' +
+      esc([r.f1, r.f2].filter(function (x) { return x; }).join('／') || '—') + '</td><td>' +
+      (idx !== null ? 'DBにあり <button type="button" data-stallion-idx="' + idx + '">詳細</button>' : '—') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<p class="note">祖先名がデータベース内の馬名と完全一致する場合は「DBにあり」と表示し、「詳細」でその馬の血統・詳細を見られます。</p>';
+  var th = checkMatingTheories(sire, dam);
+  html += '<h4>配合理論の確認（参考・未検証）</h4>';
+  html += '<p class="note">ユーザー攻略記事による推定・共有情報で、公式仕様ではありません。配合の効果を断定する表示はしません。</p><ul>';
+  html += '<li>面白い配合：' + (th.omoshiroi.hit ? '当てはまるように見えます（参考）' : '当てはまりません') +
+    ' — 父馬・母馬の 父／父母父／母父／母母父 の計8頭の親系統は' + th.omoshiroi.distinctCount + '種類（' + esc(th.omoshiroi.kinds.join('、') || 'なし') + '）。7種類以上で成立とする参考条件です。</li>';
+  html += '<li>見事な配合：' + (th.migoto.hit ? '当てはまるように見えます（参考）' : '当てはまりません') +
+    ' — 父馬の 父父母父／父母母父／母父母父／母母母父 の親系統（' + esc(th.migoto.sireKinds.join('、') || 'なし') + '）と、母馬の 父／父母父／母父／母母父 の親系統（' + esc(th.migoto.damKinds.join('、') || 'なし') + '）の多重集合が' + (th.migoto.hit ? '一致します' : '一致しません') + '。参考条件です。</li>';
+  html += '<li>よくできた配合：' + (th.yokudekita.hit ? '当てはまるように見えます（参考）' : '当てはまりません') +
+    ' — 上の2つの4頭集合で共通する親系統は' + th.yokudekita.commonCount + '種類（' + esc(th.yokudekita.commonKinds.join('、') || 'なし') + '）。3種類以上で、見事な配合でない場合に成立とする参考条件です。</li>';
+  if (th.perfectLookalike) {
+    html += '<li>完璧な配合：見事＋面白いの条件に当てはまるように見えますが、種牡馬自身が面白い配合であることも必要とする説明があり未確認のため、ここでは判定しません（参考）。</li>';
+  } else {
+    html += '<li>完璧な配合：ここでは判定しません（見事＋面白いの同時成立だけでは断定できず、種牡馬自身の条件があり未確認のため）。</li>';
+  }
+  html += '<li>至高の配合：未確認です。この機能では判定しません。</li>';
+  html += '<li>危険な配合：根拠が不確かなので判定しません。</li></ul>';
+  if (!th.anyHit) html += '<p>この組み合わせでは、確認できた配合理論はありません（参考）。</p>';
+  var crosses = findInbreeding(sire, dam);
+  html += '<h4>インブリード（クロス・参考）</h4>';
+  if (!crosses.length) {
+    html += '<p>5代以内に同じ祖先は見つかりませんでした（参考）。</p>';
+  } else {
+    html += '<ul>' + crosses.map(function (c) {
+      var pairs = c.pairs.map(function (pr) {
+        return '父方' + pr.sireGen + '代（' + pr.sireLabel + '） × 母方' + pr.damGen + '代（' + pr.damLabel + '）';
+      }).join('／');
+      var factors = [c.f1, c.f2].filter(function (x) { return x; }).join('／');
+      return '<li>' + esc(c.name) + '：' + esc(pairs) + (factors ? '（因子：' + esc(factors) + '）' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+  html += '<p class="note">出典（ユーザー攻略記事。公式仕様ではありません）：<a href="https://games.app-liv.jp/archives/232008" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」</a>、<a href="https://games.app-liv.jp/archives/198428" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のポイント」</a>、<a href="https://dbms-go.net/配合解説/完璧な配合/" target="_blank" rel="noopener">dbms-go.net「完璧な配合」</a>。詳しくは docs/rules.md を見てください。</p>';
+  html += '</details>';
+  return html;
 }
 function loadIntoForm(r) {
 $('edit-id').value = r.id;
@@ -993,11 +1180,21 @@ var ul = $('plan-list');
 ul.innerHTML = '';
 plans.forEach(function (p) {
 var li = document.createElement('li');
+var childHtml = '';
+if (planHasDbPair(p)) {
+  if (STALLIONS && Array.isArray(STALLIONS.horses) && STALLIONS.horses[p.sireDbIndex] && STALLIONS.horses[p.damDbIndex]) {
+    childHtml = buildChildPedigreeHtml(STALLIONS.horses[p.sireDbIndex], STALLIONS.horses[p.damDbIndex]);
+  } else {
+    childHtml = '<p class="note">データベースが読み込めていません。サーバー経由で開き直してください（file:// で開いている場合は子の血統・配合理論の確認は使えません）。</p>';
+  }
+} else {
+  childHtml = '<p class="note">DBから父・母を選ぶと確認できます（子の血統・配合理論の確認は、父馬・母馬の両方を種牡馬データベース検索から選んだ計画だけが対象です）。</p>';
+}
 li.innerHTML = '<p class="name">' + esc(p.name) + '</p>'
 + '<p class="meta">' + '父 ' + esc(p.sireName || '—') + (p.sireDbIndex !== null && p.sireDbIndex !== undefined ? '（DB検索から選択）' : '') + ' × 母 ' + esc(p.damName || '—') + (p.damDbIndex !== null && p.damDbIndex !== undefined ? '（DB検索から選択）' : '')
 + '\nステータス ' + esc(p.status)
 + (p.memo? '\nメモ：' + esc(p.memo): '') + '</p>'
-+ '<p class="note">配合のシミュレーションはまだありません。記録だけです。</p>';
++ childHtml;
 var editBtn = document.createElement('button');
 editBtn.type = 'button'; editBtn.textContent = '編集する';
 editBtn.addEventListener('click', function () { loadPlanIntoForm(p);});
@@ -1021,6 +1218,10 @@ damDetailBtn.type = 'button'; damDetailBtn.textContent = '母馬の血統を見�
 damDetailBtn.addEventListener('click', function () { renderStallionDetail(p.damDbIndex); });
 li.appendChild(damDetailBtn);
 }
+/* 子の血統表の中の「DBにあり」の祖先の「詳細」ボタン */
+li.querySelectorAll('button[data-stallion-idx]').forEach(function (btn) {
+btn.addEventListener('click', function () { renderStallionDetail(Number(btn.getAttribute('data-stallion-idx'))); });
+});
 ul.appendChild(li);
 });
 }
