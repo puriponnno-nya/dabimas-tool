@@ -130,6 +130,73 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('S25', '検索結果が多いときは先頭50件の旨が出る',
     getEl('s-msg').textContent.includes('先頭50件'), getEl('s-msg').textContent);
 
+  // --- I: 計画フォームの父馬・母馬欄の直接検索 ---
+  getEl('p-sire').value = 'アイアンリージ';
+  getEl('p-sire-chi').value = ''; getEl('p-sire-factor').value = ''; getEl('p-sire-hibon').value = ''; getEl('p-sire-talent').value = '';
+  C.renderPlanSuggestions('sire');
+  check('I01', '父馬欄に馬名を入れると候補が出る（アイアンリージ→3件）',
+    C.planSuggestResults.sire.length === 3, 'got=' + C.planSuggestResults.sire.length);
+  C.choosePlanSuggestion('sire', 0);
+  check('I02', '候補を選ぶと父馬欄に入りDB番号が残る',
+    getEl('p-sire').value === h0.n && C.selectedDb.sire === 0 && C.currentPlanForm().sireDbIndex === 0);
+  check('I03', '候補を選ぶと「DBから選択」と表示される',
+    getEl('p-sire-db').textContent.includes('DBから選択'), getEl('p-sire-db').textContent);
+  C.onPlanHorseNameInput('sire');
+  check('I04', '父馬名を手で直すとDB選択が外れる',
+    C.selectedDb.sire === null && C.currentPlanForm().sireDbIndex === null);
+  check('I05', '手直し後は「名前だけの入力」と表示される',
+    getEl('p-sire-db').textContent.includes('名前だけの入力'), getEl('p-sire-db').textContent);
+  getEl('p-sire').value = ''; getEl('p-sire-factor').value = '長';
+  C.renderPlanSuggestions('sire');
+  check('I06', '父馬欄の因子で絞り込める（「長」を含む馬だけ）',
+    C.planSuggestResults.sire.length > 0 && C.planSuggestResults.sire.every((r) => [r.h.f1, r.h.f2, r.h.f3].join(' ').includes('長')),
+    'got=' + C.planSuggestResults.sire.length);
+  check('I07', '候補は先頭10件まで', C.planSuggestResults.sire.length === 10,
+    'got=' + C.planSuggestResults.sire.length);
+  getEl('p-sire').value = 'アイアンリージ'; getEl('p-sire-factor').value = '';
+  getEl('p-sire-chi').value = 'ノーザンダンサー系';
+  C.renderPlanSuggestions('sire');
+  check('I08', '父馬欄の馬名＋子系統の組み合わせ（合わない条件は0件）',
+    C.planSuggestResults.sire.length === 0);
+  getEl('p-sire-chi').value = 'テディ系';
+  C.renderPlanSuggestions('sire');
+  check('I09', '父馬欄の馬名＋子系統の組み合わせ（合う条件は3件）',
+    C.planSuggestResults.sire.length === 3, 'got=' + C.planSuggestResults.sire.length);
+  getEl('p-sire').value = ''; getEl('p-sire-chi').value = '';
+  getEl('p-sire-hibon').value = '鉄情不羈';
+  C.renderPlanSuggestions('sire');
+  check('I10', '父馬欄の非凡で絞り込める',
+    C.planSuggestResults.sire.length >= 1 && C.planSuggestResults.sire.every((r) => (r.h.hibon || '').includes('鉄情不羈')));
+  getEl('p-sire-hibon').value = ''; getEl('p-sire-talent').value = '飛燕';
+  C.renderPlanSuggestions('sire');
+  check('I11', '父馬欄の天性で絞り込める（飛燕36件）',
+    C.planSuggestResults.sire.length === 10 && C.searchStallions({ talent: '飛燕' }).length === 36,
+    'got=' + C.planSuggestResults.sire.length);
+  getEl('p-sire-talent').value = '';
+  C.renderPlanSuggestions('sire');
+  check('I12', '条件なしでは候補は0件（3021件を全部出さない）',
+    C.planSuggestResults.sire.length === 0);
+  C.choosePlanSuggestion('dam', 3);
+  const h3 = C.STALLIONS.horses[3];
+  check('I13', '母馬欄も独立して選べる（父馬の選択に影響しない）',
+    getEl('p-dam').value === h3.n && C.selectedDb.dam === 3 && C.selectedDb.sire === null);
+  C.resetPlanForm();
+  check('I14', 'リセットで両方のDB選択と表示が消える',
+    C.selectedDb.sire === null && C.selectedDb.dam === null
+    && getEl('p-sire-db').textContent === '' && getEl('p-dam-db').textContent === '');
+  getEl('p-sire').value = 'DBにない馬';
+  C.onPlanHorseNameInput('sire');
+  const nameOnlyPlan = C.currentPlanForm();
+  check('I15', '名前だけの入力（DBにない馬）も計画として有効',
+    nameOnlyPlan.sireName === 'DBにない馬' && nameOnlyPlan.sireDbIndex === null
+    && C.validPlan({ id: 'p9', name: '名前だけ計画', status: '計画', sireName: 'DBにない馬', sireDbIndex: null, damDbIndex: null }));
+  C.resetPlanForm();
+  C.chooseStallionForPlan(0, 'sire');
+  check('I16', '従来の検索セクションからの選択も残り、表示が連動する',
+    getEl('p-sire').value === h0.n && C.selectedDb.sire === 0
+    && getEl('p-sire-db').textContent.includes('DBから選択'));
+  C.resetPlanForm();
+
   // --- 回帰: 定型文の読み取り（P01相当） ---
   const paste = ['馬名：キョウエイタッ20', '年齢：0歳', '解析時期：0歳 3月 5週', '解析タブ：入厩前',
     '解析時所属：未入厩', 'スピード：A', 'スタミナ：B', '根性：B', '気性：C', '体質：B',
@@ -154,6 +221,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       .every((id) => html.includes(`id="${id}"`)));
   check('R05', 'index.html に出典・断定しない注意がある',
     html.includes('ユーザー提供CSV') && html.includes('配合の効果を断定する表示はしません'));
+  check('R06', 'index.html に計画フォームの直接検索UIがある',
+    ['p-sire-suggest', 'p-dam-suggest', 'p-sire-chi', 'p-sire-factor', 'p-sire-hibon', 'p-sire-talent',
+     'p-dam-chi', 'p-dam-factor', 'p-dam-hibon', 'p-dam-talent', 'p-sire-db', 'p-dam-db']
+      .every((id) => html.includes(`id="${id}"`)));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -109,3 +109,20 @@ footer { margin-top: 26px; }
 #s-detail th, #s-detail td { border: 1px solid #2c3f7d; padding: 4px 6px; text-align: left; }
 #s-detail th { color: #ffd34d; }
 #s-results li, #s-detail { margin-bottom: 10px; }
+/* 繁殖計画フォームの父馬・母馬欄の直接検索（候補リストつき） */
+.plan-horse-field { flex: 1; min-width: 200px; }
+.plan-horse-field > label { margin-bottom: 2px; }
+.plan-db-status { min-height: 1em; margin: 2px 0 6px; color: #9fe8c0; }
+.plan-filter {
+  border: 1px dashed #4a63b8; border-radius: 16px; padding: 8px 12px; margin: 4px 0 6px;
+}
+.plan-filter summary { cursor: pointer; font-size: 13px; font-weight: bold; color: #ffd34d; min-height: 32px; display: flex; align-items: center; }
+.plan-filter label { margin: 8px 0 4px; }
+.suggest { margin: 0 0 8px; }
+.suggest li { margin: 0 0 4px; }
+.suggest .suggest-hint { font-size: 13px; color: #aab8dd; }
+.suggest button {
+  width: 100%; min-height: 44px; text-align: left; font-weight: normal;
+  border-radius: 14px; padding: 8px 12px; margin: 0;
+}
+.suggest button .suggest-meta { display: block; font-size: 12px; color: #aab8dd; }

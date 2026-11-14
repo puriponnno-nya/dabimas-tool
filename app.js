@@ -754,16 +754,18 @@ function renderStallionSearchStatus() {
   el.textContent = 'データベース ' + STALLIONS.count + '件を読み込み済み（ユーザー提供CSV・2026-11-14入手。ユーザー検証・参考）。';
 }
 function fillChiOptions() {
-  var sel = $('s-chi');
-  if (!sel) return;
-  var cur = sel.value;
-  sel.innerHTML = '<option value="">指定なし</option>';
-  stallionChiOptions().forEach(function (c) {
-    var o = document.createElement('option');
-    o.value = c; o.textContent = c;
-    sel.appendChild(o);
+  ['s-chi', 'p-sire-chi', 'p-dam-chi'].forEach(function (id) {
+    var sel = $(id);
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">指定なし</option>';
+    stallionChiOptions().forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      sel.appendChild(o);
+    });
+    sel.value = cur;
   });
-  sel.value = cur;
 }
 function runStallionSearch() {
   var msg = $('s-msg'), box = $('s-results');
@@ -804,9 +806,125 @@ function chooseStallionForPlan(idx, role) {
   var name = STALLIONS.horses[idx].n || '';
   if (role === 'sire') { $('p-sire').value = name; selectedDb.sire = idx; }
   else { $('p-dam').value = name; selectedDb.dam = idx; }
+  updatePlanDbStatus(role);
+  hidePlanSuggestions(role);
   var msg = $('s-msg');
   if (msg) msg.textContent = (role === 'sire' ? '父馬' : '母馬') + 'に「' + name + '」を選びました。計画名を入れて「計画を登録」を押してください。';
   renderStallionDetail(idx);
+}
+
+/* ---------- 繁殖計画フォームの父馬・母馬欄の直接検索 ---------- */
+/* 計画フォームの父馬・母馬の欄に、種牡馬データベース検索を直接組み込む。
+   馬名を入れる（タップして入力する）と部分一致の候補が出て、選ぶとその欄に
+   入り、DB番号（sireDbIndex／damDbIndex）も残る。子系統・因子・非凡・天性
+   でも絞り込める（欄の下の折りたたみ）。従来の検索セクションからの選択も
+   残し、そちらも同じ表示になる。名前だけの入力（DBにない馬）も引き続き
+   でき、その場合はDB番号は null のまま。候補は先頭10件まで。 */
+var PLAN_SUGGEST_LIMIT = 10;
+var planSuggestResults = { sire: [], dam: [] };
+function planSuggestRoleEls(role) {
+  var p = role === 'sire' ? 'p-sire' : 'p-dam';
+  return { name: $(p), status: $(p + '-db'), list: $(p + '-suggest'),
+    chi: $(p + '-chi'), factor: $(p + '-factor'), hibon: $(p + '-hibon'), talent: $(p + '-talent') };
+}
+function planSuggestFilters(role) {
+  var e = planSuggestRoleEls(role);
+  return {
+    name: e.name ? e.name.value : '',
+    chi: e.chi ? e.chi.value : '',
+    factor: e.factor ? e.factor.value : '',
+    hibon: e.hibon ? e.hibon.value : '',
+    talent: e.talent ? e.talent.value : ''
+  };
+}
+/* 欄の下の「DBから選択／名前だけの入力」の表示。 */
+function updatePlanDbStatus(role) {
+  var e = planSuggestRoleEls(role);
+  if (!e.status) return;
+  var idx = selectedDb[role];
+  if (idx === null || idx === undefined) {
+    e.status.textContent = (e.name && e.name.value.trim())
+      ? '名前だけの入力です（DB未選択）。子の血統・配合理論の確認には、父馬・母馬の両方をDBから選んでください。'
+      : '';
+    return;
+  }
+  var h = (STALLIONS && STALLIONS.horses[idx]) ? STALLIONS.horses[idx] : null;
+  e.status.textContent = h ? 'DBから選択：' + h.n + '（子系統 ' + (h.chi || '—') + '）' : 'DBから選択済み';
+}
+function updatePlanDbStatuses() { updatePlanDbStatus('sire'); updatePlanDbStatus('dam'); }
+function hidePlanSuggestions(role) {
+  var e = planSuggestRoleEls(role);
+  if (e.list) { e.list.innerHTML = ''; }
+  planSuggestResults[role] = [];
+}
+function hideAllPlanSuggestions() { hidePlanSuggestions('sire'); hidePlanSuggestions('dam'); }
+function renderPlanSuggestions(role) {
+  var e = planSuggestRoleEls(role);
+  var list = e.list;
+  if (!list) return;
+  list.innerHTML = '';
+  planSuggestResults[role] = [];
+  function hint(text) {
+    var li = document.createElement('li');
+    li.className = 'suggest-hint';
+    li.textContent = text;
+    list.appendChild(li);
+  }
+  if (!STALLIONS) {
+    hint('データベースが読み込めていません。名前だけの入力でも登録できます（サーバー経由で開き直すと検索が使えます）。');
+    return;
+  }
+  var q = planSuggestFilters(role);
+  var hasAny = [q.name, q.chi, q.factor, q.hibon, q.talent].some(function (v) { return String(v || '').trim() !== ''; });
+  if (!hasAny) {
+    hint('馬名を入力するか、絞り込み条件を入れると候補が出ます。DBにない馬は名前だけの入力でも登録できます。');
+    return;
+  }
+  var results = searchStallions(q);
+  if (!results.length) {
+    hint('見つかりませんでした。条件を変えるか、名前だけの入力でも登録できます。');
+    return;
+  }
+  var shown = results.slice(0, PLAN_SUGGEST_LIMIT);
+  planSuggestResults[role] = shown;
+  shown.forEach(function (r) {
+    var h = r.h;
+    var li = document.createElement('li');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = h.n || '';
+    var meta = document.createElement('span');
+    meta.className = 'suggest-meta';
+    meta.textContent = '子系統 ' + (h.chi || '—') + '／因子 ' + (stallionFactors(h) || '—')
+      + '／非凡 ' + (h.hibon || '—') + '／天性 ' + (h.talent || '—');
+    btn.appendChild(meta);
+    /* blur で候補が消える前に選べるよう、click ではなく mousedown で選ぶ */
+    btn.addEventListener('mousedown', function (ev) {
+      if (ev && ev.preventDefault) ev.preventDefault();
+      choosePlanSuggestion(role, r.idx);
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+  if (results.length > PLAN_SUGGEST_LIMIT) {
+    hint(results.length + '件見つかりました（先頭' + PLAN_SUGGEST_LIMIT + '件を表示）。条件を絞るとほかの候補も出ます。');
+  }
+}
+/* 候補から選ぶ：名前を欄に入れ、DB番号を残す。手で名前を直すと
+   onPlanHorseNameInput が DB番号を外す（名前とDB番号の食い違い防止）。 */
+function choosePlanSuggestion(role, idx) {
+  if (!STALLIONS || !STALLIONS.horses[idx]) return;
+  var e = planSuggestRoleEls(role);
+  var name = STALLIONS.horses[idx].n || '';
+  if (e.name) e.name.value = name;
+  selectedDb[role] = idx;
+  updatePlanDbStatus(role);
+  hidePlanSuggestions(role);
+}
+function onPlanHorseNameInput(role) {
+  selectedDb[role] = null;
+  updatePlanDbStatus(role);
+  renderPlanSuggestions(role);
 }
 function renderStallionDetail(idx) {
   var box = $('s-detail');
@@ -1124,8 +1242,23 @@ $('plan-cancel-edit').addEventListener('click', resetPlanForm);
 /* 種牡馬データベース検索：検索ボタンと、父馬・母馬名を手で直したときに
    DB選択を外す処理（手入力の名前とDBの番号が食い違わないようにする）。 */
 $('s-search').addEventListener('click', runStallionSearch);
-$('p-sire').addEventListener('input', function () { selectedDb.sire = null; });
-$('p-dam').addEventListener('input', function () { selectedDb.dam = null; });
+/* 計画フォームの父馬・母馬欄の直接検索：入力で候補を出し直し、フォーカスで
+   候補を出し、欄を離れたら少し遅らせて候補を隠す（候補の mousedown が
+   先に動くようにする）。Esc でも候補を隠す。絞り込み条件の変更でも候補を
+   出し直す。 */
+['sire', 'dam'].forEach(function (role) {
+  var e = planSuggestRoleEls(role);
+  if (e.name) {
+    e.name.addEventListener('input', function () { onPlanHorseNameInput(role); });
+    e.name.addEventListener('focus', function () { renderPlanSuggestions(role); });
+    e.name.addEventListener('blur', function () { setTimeout(function () { hidePlanSuggestions(role); }, 150); });
+    e.name.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') hidePlanSuggestions(role); });
+  }
+  ['chi', 'factor', 'hibon', 'talent'].forEach(function (key) {
+    if (e[key]) e[key].addEventListener('input', function () { renderPlanSuggestions(role); });
+    if (e[key]) e[key].addEventListener('change', function () { renderPlanSuggestions(role); });
+  });
+});
 
 /* メモリ欄に 1〜6 を手で入れたときも成長タイプに反映する */
 $('f-memory').addEventListener('input', function () {
@@ -1162,13 +1295,26 @@ $('p-memo').value = p.memo || '';
 $('plan-save-btn').textContent = '計画を更新';
 $('plan-cancel-edit').hidden = false;
 $('plan-form-error').textContent = '';
+updatePlanDbStatuses();
+hideAllPlanSuggestions();
 window.scrollTo(0, 0);
 }
 function resetPlanForm() {
 $('plan-edit-id').value = '';
 $('plan-form').reset();
+/* 名前欄と絞り込み欄は明示的にも空にする（form.reset() だけに頼らない。
+   既定値は空欄なので、ブラウザでの動きは reset() と同じ）。 */
+$('p-sire').value = '';
+$('p-dam').value = '';
+['chi', 'factor', 'hibon', 'talent'].forEach(function (key) {
+  var s = $('p-sire-' + key), d = $('p-dam-' + key);
+  if (s) s.value = '';
+  if (d) d.value = '';
+});
 selectedDb.sire = null;
 selectedDb.dam = null;
+updatePlanDbStatuses();
+hideAllPlanSuggestions();
 $('plan-save-btn').textContent = '計画を登録';
 $('plan-cancel-edit').hidden = true;
 $('plan-form-error').textContent = '';
