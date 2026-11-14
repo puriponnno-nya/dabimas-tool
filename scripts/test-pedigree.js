@@ -234,9 +234,9 @@ function fakeHorse(name, paByIdx, nameByIdx, factorByIdx) {
   check('M27', 'DB両方選択の計画には「子の血統・配合理論を見る」が出る',
     planLis.length === 3 && planLis[0].innerHTML.includes('子の血統・配合理論を見る') &&
     planLis[0].innerHTML.includes('ブルリー'), 'lis=' + planLis.length);
-  check('M28', '名前だけの計画にはボタンが出ず、DBから選ぶ旨だけ出る',
+  check('M28', '名前だけの計画にはボタンが出ず、DBまたは自家生産馬から選ぶ旨だけ出る',
     !planLis[1].innerHTML.includes('子の血統・配合理論を見る') &&
-    planLis[1].innerHTML.includes('DBから父・母を選ぶと確認できます'));
+    planLis[1].innerHTML.includes('DBまたは自家生産馬から父・母を選ぶと確認できます'));
   check('M29', '片方だけDB選択の計画にもボタンは出ない',
     !planLis[2].innerHTML.includes('子の血統・配合理論を見る'));
   check('M30', 'planHasDbPair の判定',

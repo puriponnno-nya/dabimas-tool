@@ -491,7 +491,180 @@ if (p.damHorseId !== undefined && p.damHorseId !== null && typeof p.damHorseId!=
 /* DB検索からの選択：種牡馬データベース内の番号（整数）または null。 */
 if (p.sireDbIndex !== undefined && p.sireDbIndex !== null && (!Number.isInteger(p.sireDbIndex) || p.sireDbIndex < 0)) return false;
 if (p.damDbIndex !== undefined && p.damDbIndex !== null && (!Number.isInteger(p.damDbIndex) || p.damDbIndex < 0)) return false;
+/* 自家生産馬からの選択：自分の馬のID（文字列）または null。 */
+if (p.sireOwnId !== undefined && p.sireOwnId !== null && typeof p.sireOwnId !== 'string') return false;
+if (p.damOwnId !== undefined && p.damOwnId !== null && typeof p.damOwnId !== 'string') return false;
 return true;
+}
+
+/* ---------- 自分の馬（自家生産馬：2代目以降の配合用） ---------- */
+/* 配合計画の子を「次の配合の親」として登録した馬。能力判定ツールの登録馬
+   とは別扱いで、繁殖計画ツールの中だけで使う。保存は馬・繁殖計画とは
+   別のキー。子の血統（anc 15件）は、両親の血統を1代ずらしたもの
+   （buildChildAnc）。3代目以降も同じ仕組みで続けられる（子を登録→
+   その子を親に選ぶ→また子を登録、の繰り返し）。
+   性別は 牡／牝／不明。牡は父馬欄、牝は母馬欄、不明は両方に選べる。
+   generation は世代数（DB馬を1代目として、DB同士の子は2代目）。 */
+var LS_OWN_KEY = 'dabimas-own-horses-v1';
+var OWN_SEXES = ['牡', '牝', '不明'];
+function loadOwnHorses() {
+try {
+var raw = localStorage.getItem(LS_OWN_KEY);
+if (!raw) return [];
+var data = JSON.parse(raw);
+if (!data || data.version !== DATA_VERSION || !Array.isArray(data.ownHorses)) return [];
+return data.ownHorses.filter(function (h) { return validOwnHorse(h); });
+} catch (e) { return []; }
+}
+function saveOwnHorses(list) {
+localStorage.setItem(LS_OWN_KEY, JSON.stringify({ version: DATA_VERSION, ownHorses: list }));
+}
+function newOwnId() { return 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function validOwnHorse(h) {
+if (!h || typeof h !== 'object') return false;
+if (typeof h.id !== 'string' || !h.id) return false;
+if (typeof h.name !== 'string' || !h.name.trim()) return false;
+if (OWN_SEXES.indexOf(h.sex) < 0) return false;
+if (!Array.isArray(h.anc) || h.anc.length !== 15) return false;
+for (var i = 0; i < h.anc.length; i++) {
+var a = h.anc[i];
+if (!Array.isArray(a) || typeof a[0] !== 'string' || !a[0]) return false;
+for (var j = 1; j < a.length; j++) { if (typeof a[j] !== 'string') return false; }
+}
+if (h.generation !== undefined && (!Number.isInteger(h.generation) || h.generation < 2)) return false;
+var optText = ['sireName', 'damName', 'planId'];
+for (var k = 0; k < optText.length; k++) {
+if (h[optText[k]] !== undefined && typeof h[optText[k]] !== 'string') return false;
+}
+if (h.sireDbIndex !== undefined && h.sireDbIndex !== null && (!Number.isInteger(h.sireDbIndex) || h.sireDbIndex < 0)) return false;
+if (h.damDbIndex !== undefined && h.damDbIndex !== null && (!Number.isInteger(h.damDbIndex) || h.damDbIndex < 0)) return false;
+if (h.sireOwnId !== undefined && h.sireOwnId !== null && typeof h.sireOwnId !== 'string') return false;
+if (h.damOwnId !== undefined && h.damOwnId !== null && typeof h.damOwnId !== 'string') return false;
+return true;
+}
+function findOwnHorse(id) {
+if (!id) return null;
+for (var i = 0; i < ownHorses.length; i++) { if (ownHorses[i].id === id) return ownHorses[i]; }
+return null;
+}
+/* 自家生産馬を、血統の組み立て・配合理論・インブリードで使う形
+   {n, chi, f1, f2, anc} にそろえる。DB馬はそのままの形。
+   自家生産馬自身の子系統・因子は不明のため空（空の親系統は配合理論では
+   数えない扱い。子の血統表の表示にも使わない）。 */
+function ownHorsePedigree(o) {
+if (!o) return null;
+return { n: o.name, chi: '', f1: '', f2: '', anc: o.anc };
+}
+function toPedigree(h) {
+if (!h) return null;
+if (typeof h.n === 'string') return h;
+if (typeof h.name === 'string') return ownHorsePedigree(h);
+return null;
+}
+/* 親の指定（{dbIndex, ownId} のどちらか片方）を血統で使う形に解決する。
+   自家生産馬が削除されていたり、DBが読み込めていなければ null。 */
+function resolveParentRef(ref) {
+if (!ref) return null;
+if (ref.ownId) return ownHorsePedigree(findOwnHorse(ref.ownId));
+if (ref.dbIndex !== null && ref.dbIndex !== undefined) {
+if (!STALLIONS || !Array.isArray(STALLIONS.horses) || !STALLIONS.horses[ref.dbIndex]) return null;
+return STALLIONS.horses[ref.dbIndex];
+}
+return null;
+}
+/* 計画の父馬・母馬の両方を解決する。片方でも解決できなければ null。 */
+function resolvePlanParents(p) {
+if (!p) return null;
+var sire = resolveParentRef({ dbIndex: p.sireDbIndex, ownId: p.sireOwnId });
+var dam = resolveParentRef({ dbIndex: p.damDbIndex, ownId: p.damOwnId });
+if (!sire || !dam) return null;
+return { sire: sire, dam: dam };
+}
+function planHasPedigreePair(p) { return !!resolvePlanParents(p); }
+/* 計画に父馬・母馬の指定（DB・自家生産馬のどちらか）が1つでもあるか。 */
+function planHasAnyParentRef(p) {
+if (!p) return false;
+return (p.sireDbIndex !== null && p.sireDbIndex !== undefined) ||
+(p.damDbIndex !== null && p.damDbIndex !== undefined) ||
+!!p.sireOwnId || !!p.damOwnId;
+}
+/* 親の世代数。DB馬は1代目、自家生産馬は登録時の generation。 */
+function parentGeneration(ref) {
+if (ref && ref.ownId) {
+var o = findOwnHorse(ref.ownId);
+return (o && o.generation) ? o.generation : 2;
+}
+return 1;
+}
+function childGeneration(sireRef, damRef) {
+return Math.max(parentGeneration(sireRef), parentGeneration(damRef)) + 1;
+}
+function defaultChildName(plan) { return (plan && plan.name ? plan.name : '配合計画') + 'の子'; }
+/* 子の血統（anc 15件）を組み立てる。buildChildPedigree の15行を
+   [名前, 親系統, 子系統, 因子1, 因子2] に直したもの。
+   0番目（父そのもの）だけは行に親系統・因子がないため、父馬自身の
+   子系統・因子1・因子2を入れる。父馬自身の親系統はデータにないため空。 */
+function buildChildAnc(sire, dam) {
+var rows = buildChildPedigree(sire, dam);
+if (!rows) return null;
+var anc = rows.map(function (r) { return [r.name || '', r.pa || '', r.chi || '', r.f1 || '', r.f2 || '']; });
+anc[0] = [sire.n || '', '', sire.chi || '', sire.f1 || '', sire.f2 || ''];
+return anc;
+}
+/* 計画の子を自家生産馬として登録する。返り値は {ok, horse} または
+   {ok: false, error}。子の血統は buildChildAnc で組み立てる。 */
+function registerOwnHorseFromPlan(plan, childName, sex) {
+if (!plan) return { ok: false, error: '計画が見つかりません' };
+var pair = resolvePlanParents(plan);
+if (!pair) return { ok: false, error: '父馬・母馬の両方が解決できません。データベースの読み込みと、自家生産馬が削除されていないか確認してください。' };
+var name = String(childName || '').trim();
+if (!name) return { ok: false, error: '子の名前を入力してください' };
+if (OWN_SEXES.indexOf(sex) < 0) return { ok: false, error: '性別を選んでください' };
+var anc = buildChildAnc(pair.sire, pair.dam);
+if (!anc) return { ok: false, error: '子の血統を組み立てられませんでした' };
+var now = new Date().toISOString();
+var sireRef = { dbIndex: plan.sireDbIndex, ownId: plan.sireOwnId };
+var damRef = { dbIndex: plan.damDbIndex, ownId: plan.damOwnId };
+var rec = {
+id: newOwnId(), name: name, sex: sex,
+sireName: plan.sireName || pair.sire.n || '',
+damName: plan.damName || pair.dam.n || '',
+sireDbIndex: (plan.sireDbIndex === undefined ? null : plan.sireDbIndex),
+damDbIndex: (plan.damDbIndex === undefined ? null : plan.damDbIndex),
+sireOwnId: plan.sireOwnId || null,
+damOwnId: plan.damOwnId || null,
+planId: plan.id || '',
+generation: childGeneration(sireRef, damRef),
+anc: anc, createdAt: now, updatedAt: now
+};
+if (!validOwnHorse(rec)) return { ok: false, error: '子の登録データを作れませんでした' };
+ownHorses.push(rec);
+saveOwnHorses(ownHorses);
+return { ok: true, horse: rec };
+}
+function deleteOwnHorse(id) {
+ownHorses = ownHorses.filter(function (h) { return h.id !== id; });
+saveOwnHorses(ownHorses);
+}
+/* 性別による出し分け。牡は父馬欄、牝は母馬欄、不明は両方に選べる。 */
+function ownHorseEligibleFor(role, h) {
+if (!h) return false;
+if (role === 'sire') return h.sex === '牡' || h.sex === '不明';
+if (role === 'dam') return h.sex === '牝' || h.sex === '不明';
+return false;
+}
+/* 自家生産馬の名前検索。因子・非凡・天性・子系統で絞っている場合、
+   自家生産馬はその情報を持たないため候補に出さない。 */
+function searchOwnHorses(q, role) {
+q = q || {};
+if (String(q.chi || '').trim() || String(q.factor || '').trim() ||
+String(q.hibon || '').trim() || String(q.talent || '').trim()) return [];
+var name = String(q.name || '').trim().toLowerCase();
+return ownHorses.filter(function (h) {
+if (!ownHorseEligibleFor(role, h)) return false;
+if (name && h.name.toLowerCase().indexOf(name) < 0) return false;
+return true;
+});
 }
 
 /* ---------- 種牡馬データベース検索（ステップ2） ---------- */
@@ -542,12 +715,16 @@ function stallionChiOptions() {
 }
 /* 検索で選んだ父馬・母馬（データベース内の番号。未選択は null）。 */
 var selectedDb = { sire: null, dam: null };
+/* 自家生産馬から選んだ父馬・母馬（自分の馬のID。未選択は null）。
+   DB選択と自家生産馬の選択は、片方を選ぶともう片方が外れる。 */
+var selectedOwn = { sire: null, dam: null };
 var stallionResults = [];
 
 /* ---------- 画面 ---------- */
 var $ = function (id) { return document.getElementById(id);};
 var records = loadAll();
 var plans = loadPlans();
+var ownHorses = loadOwnHorses();
 var pendingManual = []; /* 今の入力に対する未分類の手修正 */
 var pendingMeasureLog = []; /* 今の入力に対する測定メモ（絞り込み用） */
 
@@ -804,13 +981,26 @@ function runStallionSearch() {
 function chooseStallionForPlan(idx, role) {
   if (!STALLIONS || !STALLIONS.horses[idx]) return;
   var name = STALLIONS.horses[idx].n || '';
-  if (role === 'sire') { $('p-sire').value = name; selectedDb.sire = idx; }
-  else { $('p-dam').value = name; selectedDb.dam = idx; }
+  if (role === 'sire') { $('p-sire').value = name; selectedDb.sire = idx; selectedOwn.sire = null; }
+  else { $('p-dam').value = name; selectedDb.dam = idx; selectedOwn.dam = null; }
   updatePlanDbStatus(role);
   hidePlanSuggestions(role);
   var msg = $('s-msg');
   if (msg) msg.textContent = (role === 'sire' ? '父馬' : '母馬') + 'に「' + name + '」を選びました。計画名を入れて「計画を登録」を押してください。';
   renderStallionDetail(idx);
+}
+/* 自家生産馬を計画の父馬・母馬に選ぶ。性別に合わない役割には選べない。 */
+function chooseOwnHorseForPlan(role, id) {
+  var o = findOwnHorse(id);
+  if (!o || !ownHorseEligibleFor(role, o)) return;
+  if (role === 'sire') { $('p-sire').value = o.name; selectedOwn.sire = id; selectedDb.sire = null; }
+  else { $('p-dam').value = o.name; selectedOwn.dam = id; selectedDb.dam = null; }
+  updatePlanDbStatus(role);
+  hidePlanSuggestions(role);
+  var msg = $('own-msg');
+  if (msg) msg.textContent = (role === 'sire' ? '父馬' : '母馬') + 'に自家生産馬「' + o.name + '」（' + o.sex + '・' + o.generation + '代目）を選びました。計画名を入れて「計画を登録」を押してください。';
+  var form = $('plan-form');
+  if (form && form.scrollIntoView) form.scrollIntoView();
 }
 
 /* ---------- 繁殖計画フォームの父馬・母馬欄の直接検索 ---------- */
@@ -837,14 +1027,21 @@ function planSuggestFilters(role) {
     talent: e.talent ? e.talent.value : ''
   };
 }
-/* 欄の下の「DBから選択／名前だけの入力」の表示。 */
+/* 欄の下の「DBから選択／自家生産馬から選択／名前だけの入力」の表示。 */
 function updatePlanDbStatus(role) {
   var e = planSuggestRoleEls(role);
   if (!e.status) return;
+  var ownId = selectedOwn[role];
+  if (ownId) {
+    var o = findOwnHorse(ownId);
+    e.status.textContent = o ? '自家生産馬から選択：' + o.name + '（' + o.sex + '・' + o.generation + '代目）'
+      : '自家生産馬から選択済みですが、見つかりません（削除された可能性があります）。';
+    return;
+  }
   var idx = selectedDb[role];
   if (idx === null || idx === undefined) {
     e.status.textContent = (e.name && e.name.value.trim())
-      ? '名前だけの入力です（DB未選択）。子の血統・配合理論の確認には、父馬・母馬の両方をDBから選んでください。'
+      ? '名前だけの入力です（DB・自家生産馬とも未選択）。子の血統・配合理論の確認には、父馬・母馬の両方をDBまたは自家生産馬から選んでください。'
       : '';
     return;
   }
@@ -858,6 +1055,23 @@ function hidePlanSuggestions(role) {
   planSuggestResults[role] = [];
 }
 function hideAllPlanSuggestions() { hidePlanSuggestions('sire'); hidePlanSuggestions('dam'); }
+/* 自家生産馬1頭分の候補行（「【自家生産馬】」と区別がつく表示）。 */
+function renderOwnSuggestItem(list, role, o) {
+  var li = document.createElement('li');
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '【自家生産馬】' + o.name;
+  var meta = document.createElement('span');
+  meta.className = 'suggest-meta';
+  meta.textContent = o.sex + '・' + o.generation + '代目／父 ' + (o.sireName || '—') + ' × 母 ' + (o.damName || '—');
+  btn.appendChild(meta);
+  btn.addEventListener('mousedown', function (ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    chooseOwnHorseForPlan(role, o.id);
+  });
+  li.appendChild(btn);
+  list.appendChild(li);
+}
 function renderPlanSuggestions(role) {
   var e = planSuggestRoleEls(role);
   var list = e.list;
@@ -870,7 +1084,15 @@ function renderPlanSuggestions(role) {
     li.textContent = text;
     list.appendChild(li);
   }
+  /* データベースが読み込めていなくても、自家生産馬の候補だけは出せる。 */
+  var q0 = planSuggestFilters(role);
   if (!STALLIONS) {
+    var ownOnly = searchOwnHorses(q0, role);
+    if (ownOnly.length) {
+      ownOnly.slice(0, PLAN_SUGGEST_LIMIT).forEach(function (o) {
+        renderOwnSuggestItem(list, role, o);
+      });
+    }
     hint('データベースが読み込めていません。名前だけの入力でも登録できます（サーバー経由で開き直すと検索が使えます）。');
     return;
   }
@@ -881,7 +1103,10 @@ function renderPlanSuggestions(role) {
     return;
   }
   var results = searchStallions(q);
-  if (!results.length) {
+  /* 自家生産馬も一緒に候補に出す（区別がつく表示にする）。性別で出し分ける。
+     DBの候補とは別枠で、先頭10件まで。 */
+  var ownResults = searchOwnHorses(q, role);
+  if (!results.length && !ownResults.length) {
     hint('見つかりませんでした。条件を変えるか、名前だけの入力でも登録できます。');
     return;
   }
@@ -909,6 +1134,9 @@ function renderPlanSuggestions(role) {
   if (results.length > PLAN_SUGGEST_LIMIT) {
     hint(results.length + '件見つかりました（先頭' + PLAN_SUGGEST_LIMIT + '件を表示）。条件を絞るとほかの候補も出ます。');
   }
+  ownResults.slice(0, PLAN_SUGGEST_LIMIT).forEach(function (o) {
+    renderOwnSuggestItem(list, role, o);
+  });
 }
 /* 候補から選ぶ：名前を欄に入れ、DB番号を残す。手で名前を直すと
    onPlanHorseNameInput が DB番号を外す（名前とDB番号の食い違い防止）。 */
@@ -918,11 +1146,13 @@ function choosePlanSuggestion(role, idx) {
   var name = STALLIONS.horses[idx].n || '';
   if (e.name) e.name.value = name;
   selectedDb[role] = idx;
+  selectedOwn[role] = null;
   updatePlanDbStatus(role);
   hidePlanSuggestions(role);
 }
 function onPlanHorseNameInput(role) {
   selectedDb[role] = null;
+  selectedOwn[role] = null;
   updatePlanDbStatus(role);
   renderPlanSuggestions(role);
 }
@@ -1279,6 +1509,8 @@ sireHorseId: null,
 damHorseId: null,
 sireDbIndex: selectedDb.sire,
 damDbIndex: selectedDb.dam,
+sireOwnId: selectedOwn.sire,
+damOwnId: selectedOwn.dam,
 status: $('p-status').value,
 memo: $('p-memo').value.trim()
 };
@@ -1290,6 +1522,8 @@ $('p-sire').value = p.sireName || '';
 $('p-dam').value = p.damName || '';
 selectedDb.sire = (p.sireDbIndex === undefined || p.sireDbIndex === null) ? null : p.sireDbIndex;
 selectedDb.dam = (p.damDbIndex === undefined || p.damDbIndex === null) ? null : p.damDbIndex;
+selectedOwn.sire = p.sireOwnId || null;
+selectedOwn.dam = p.damOwnId || null;
 $('p-status').value = p.status;
 $('p-memo').value = p.memo || '';
 $('plan-save-btn').textContent = '計画を更新';
@@ -1313,6 +1547,8 @@ $('p-dam').value = '';
 });
 selectedDb.sire = null;
 selectedDb.dam = null;
+selectedOwn.sire = null;
+selectedOwn.dam = null;
 updatePlanDbStatuses();
 hideAllPlanSuggestions();
 $('plan-save-btn').textContent = '計画を登録';
@@ -1327,17 +1563,16 @@ ul.innerHTML = '';
 plans.forEach(function (p) {
 var li = document.createElement('li');
 var childHtml = '';
-if (planHasDbPair(p)) {
-  if (STALLIONS && Array.isArray(STALLIONS.horses) && STALLIONS.horses[p.sireDbIndex] && STALLIONS.horses[p.damDbIndex]) {
-    childHtml = buildChildPedigreeHtml(STALLIONS.horses[p.sireDbIndex], STALLIONS.horses[p.damDbIndex]);
-  } else {
-    childHtml = '<p class="note">データベースが読み込めていません。サーバー経由で開き直してください（file:// で開いている場合は子の血統・配合理論の確認は使えません）。</p>';
-  }
+var pair = resolvePlanParents(p);
+if (pair) {
+  childHtml = buildChildPedigreeHtml(pair.sire, pair.dam);
+} else if (planHasAnyParentRef(p)) {
+  childHtml = '<p class="note">選んだ父馬・母馬が見つかりません。データベースが読み込めていないか、自家生産馬が削除された可能性があります。サーバー経由で開き直すか、父馬・母馬を選び直してください。</p>';
 } else {
-  childHtml = '<p class="note">DBから父・母を選ぶと確認できます（子の血統・配合理論の確認は、父馬・母馬の両方を種牡馬データベース検索から選んだ計画だけが対象です）。</p>';
+  childHtml = '<p class="note">DBまたは自家生産馬から父・母を選ぶと確認できます（子の血統・配合理論の確認は、父馬・母馬の両方を種牡馬データベース検索または自家生産馬から選んだ計画だけが対象です）。</p>';
 }
 li.innerHTML = '<p class="name">' + esc(p.name) + '</p>'
-+ '<p class="meta">' + '父 ' + esc(p.sireName || '—') + (p.sireDbIndex !== null && p.sireDbIndex !== undefined ? '（DB検索から選択）' : '') + ' × 母 ' + esc(p.damName || '—') + (p.damDbIndex !== null && p.damDbIndex !== undefined ? '（DB検索から選択）' : '')
++ '<p class="meta">' + '父 ' + esc(p.sireName || '—') + (p.sireDbIndex !== null && p.sireDbIndex !== undefined ? '（DB検索から選択）' : '') + (p.sireOwnId ? '（自家生産馬から選択）' : '') + ' × 母 ' + esc(p.damName || '—') + (p.damDbIndex !== null && p.damDbIndex !== undefined ? '（DB検索から選択）' : '') + (p.damOwnId ? '（自家生産馬から選択）' : '')
 + '\nステータス ' + esc(p.status)
 + (p.memo? '\nメモ：' + esc(p.memo): '') + '</p>'
 + childHtml;
@@ -1368,6 +1603,98 @@ li.appendChild(damDetailBtn);
 li.querySelectorAll('button[data-stallion-idx]').forEach(function (btn) {
 btn.addEventListener('click', function () { renderStallionDetail(Number(btn.getAttribute('data-stallion-idx'))); });
 });
+/* 子を次の配合の親として登録する（父馬・母馬の両方が解決できる計画だけ）。
+   子の名前はユーザーが決められる（初期値は計画名＋「の子」）。
+   登録した子は自家生産馬として保存され、次の計画の父馬・母馬の欄から
+   選べる。配合理論の効果を断定しない（表示は参考・未検証のまま）。 */
+if (pair) {
+var regDiv = document.createElement('div');
+regDiv.className = 'child-register';
+var regTitle = document.createElement('p');
+regTitle.className = 'note';
+regTitle.textContent = 'この子を次の配合の親として登録する（子の血統は参考・未検証の表示で登録します）';
+regDiv.appendChild(regTitle);
+var regName = document.createElement('input');
+regName.type = 'text';
+regName.value = defaultChildName(p);
+regName.setAttribute('aria-label', '子の名前');
+regDiv.appendChild(regName);
+var regSex = document.createElement('select');
+regSex.setAttribute('aria-label', '子の性別');
+['不明', '牡', '牝'].forEach(function (s) {
+var opt = document.createElement('option');
+opt.value = s; opt.textContent = s;
+regSex.appendChild(opt);
+});
+regDiv.appendChild(regSex);
+var regMsg = document.createElement('p');
+regMsg.className = 'note';
+regMsg.setAttribute('role', 'status');
+regDiv.appendChild(regMsg);
+var regBtn = document.createElement('button');
+regBtn.type = 'button'; regBtn.textContent = '子を登録する';
+regBtn.addEventListener('click', function () {
+var res = registerOwnHorseFromPlan(p, regName.value, regSex.value);
+if (!res.ok) { regMsg.textContent = res.error; return; }
+regMsg.textContent = '「' + res.horse.name + '」を自家生産馬として登録しました（' + res.horse.sex + '・' + res.horse.generation + '代目）。次の繁殖計画の父馬・母馬の欄から選べます。';
+renderOwnHorses();
+});
+regDiv.appendChild(regBtn);
+li.appendChild(regDiv);
+}
+ul.appendChild(li);
+});
+}
+
+/* ---------- 自分の馬（自家生産馬）の一覧・削除 ---------- */
+function renderOwnHorses() {
+var countEl = $('own-count');
+if (!countEl) return;
+countEl.textContent = String(ownHorses.length);
+$('own-empty-note').style.display = ownHorses.length ? 'none' : 'block';
+var ul = $('own-list');
+ul.innerHTML = '';
+var labels = (STALLIONS && STALLIONS.ancestors) ? STALLIONS.ancestors : CHILD_PEDIGREE_LABELS;
+ownHorses.forEach(function (o) {
+var li = document.createElement('li');
+li.innerHTML = '<p class="name">' + esc(o.name) + '【自家生産馬】</p>'
++ '<p class="meta">' + '性別 ' + esc(o.sex) + '／' + o.generation + '代目'
++ '／父 ' + esc(o.sireName || '—') + ' × 母 ' + esc(o.damName || '—') + '</p>';
+var det = document.createElement('details');
+det.className = 'ref-details';
+var sum = document.createElement('summary');
+sum.textContent = '血統（5代・参考）を見る';
+det.appendChild(sum);
+var div = document.createElement('div');
+var rows = '';
+for (var i = 0; i < 15; i++) {
+var a = o.anc[i] || [];
+rows += '<tr><td>' + esc(labels[i] || ('祖先' + (i + 1))) + '</td><td>' + esc(a[0] || '—') + '</td><td>' + esc(a[1] || '—') + '</td><td>' + esc([a[3], a[4]].filter(function (x) { return x; }).join('／') || '—') + '</td></tr>';
+}
+div.innerHTML = '<table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>因子</th></tr></thead><tbody>' + rows + '</tbody></table>'
++ '<p class="note">子の血統は、両親の血統を1代ずらしたものです（参考・未検証）。父馬自身の親系統はデータにないため空欄です。配合理論の効果を断定する表示はしません。</p>';
+det.appendChild(div);
+li.appendChild(det);
+if (ownHorseEligibleFor('sire', o)) {
+var sireBtn = document.createElement('button');
+sireBtn.type = 'button'; sireBtn.textContent = '父馬に選ぶ';
+sireBtn.addEventListener('click', function () { chooseOwnHorseForPlan('sire', o.id); });
+li.appendChild(sireBtn);
+}
+if (ownHorseEligibleFor('dam', o)) {
+var damBtn = document.createElement('button');
+damBtn.type = 'button'; damBtn.textContent = '母馬に選ぶ';
+damBtn.addEventListener('click', function () { chooseOwnHorseForPlan('dam', o.id); });
+li.appendChild(damBtn);
+}
+var delBtn = document.createElement('button');
+delBtn.type = 'button'; delBtn.textContent = '削除する'; delBtn.className = 'danger';
+delBtn.addEventListener('click', function () {
+if (!window.confirm('自家生産馬「' + o.name + '」を削除しますか？この馬を親に選んだ繁殖計画の子の血統・配合理論の確認はできなくなります。')) return;
+deleteOwnHorse(o.id);
+renderOwnHorses(); renderPlans();
+});
+li.appendChild(delBtn);
 ul.appendChild(li);
 });
 }
@@ -1414,24 +1741,13 @@ if (typeof r.manual[i].src!== 'string' || ['tal', 'fut', 'fea', 'exp'].indexOf(r
 }
 return true;
 }
-$('export-btn').addEventListener('click', function () {
-var blob = new Blob([JSON.stringify({ version: DATA_VERSION, exportedAt: new Date().toISOString(), records: records, plans: plans}, null, 2)], { type: 'application/json'});
-var a = document.createElement('a');
-a.href = URL.createObjectURL(blob);
-a.download = 'dabimas-ability-v1.json';
-a.click();
-setTimeout(function () { URL.revokeObjectURL(a.href);}, 1000);
-$('io-msg').textContent = records.length + '件の馬と' + plans.length + '件の繁殖計画を書き出しました。';
-$('io-error').textContent = '';
-});
-$('import-file').addEventListener('change', function (e) {
-var file = e.target.files && e.target.files[0];
-if (!file) return;
-var reader = new FileReader();
-reader.onload = function () {
-try {
-var data = JSON.parse(String(reader.result));
-if (!data || data.version!== DATA_VERSION ||!Array.isArray(data.records)) throw new Error('形式が違います（version 1 の全件データではありません）');
+/* JSON書き出し・読み込みのデータ。ownHorses（自家生産馬）も含める。
+   ownHorses のない旧形式のJSONは、既存の自分の馬を残す（後方互換）。 */
+function buildExportData() {
+return { version: DATA_VERSION, exportedAt: new Date().toISOString(), records: records, plans: plans, ownHorses: ownHorses };
+}
+function parseImportData(data, currentPlans, currentOwnHorses) {
+if (!data || data.version !== DATA_VERSION || !Array.isArray(data.records)) throw new Error('形式が違います（version 1 の全件データではありません）');
 var ids = {};
 data.records.forEach(function (r) {
 if (!validRecord(r)) throw new Error('不正なレコードがあります（馬名・性別・ランクを確認してください）');
@@ -1440,7 +1756,7 @@ ids[r.id] = true;
 });
 /* 繁殖計画：plans がある場合は検証して全件置き換え。ない旧形式のJSON
    （馬だけ）の場合は、既存の繁殖計画はそのまま残す（後方互換）。 */
-var newPlans = plans;
+var newPlans = currentPlans;
 if (data.plans !== undefined) {
 if (!Array.isArray(data.plans)) throw new Error('繁殖計画の形式が違います');
 var pids = {};
@@ -1451,12 +1767,47 @@ pids[p.id] = true;
 });
 newPlans = data.plans;
 }
-records = data.records;
-plans = newPlans;
+/* 自分の馬：ownHorses がある場合は検証して全件置き換え。ない旧形式の
+   JSONの場合は、既存の自分の馬はそのまま残す（後方互換）。 */
+var newOwn = currentOwnHorses;
+if (data.ownHorses !== undefined) {
+if (!Array.isArray(data.ownHorses)) throw new Error('自分の馬の形式が違います');
+var oids = {};
+data.ownHorses.forEach(function (h) {
+if (!validOwnHorse(h)) throw new Error('不正な自分の馬があります（名前・性別・血統を確認してください）');
+if (oids[h.id]) throw new Error('自分の馬のIDが重複しています');
+oids[h.id] = true;
+});
+newOwn = data.ownHorses;
+}
+return { records: data.records, plans: newPlans, ownHorses: newOwn };
+}
+$('export-btn').addEventListener('click', function () {
+var blob = new Blob([JSON.stringify(buildExportData(), null, 2)], { type: 'application/json'});
+var a = document.createElement('a');
+a.href = URL.createObjectURL(blob);
+a.download = 'dabimas-ability-v1.json';
+a.click();
+setTimeout(function () { URL.revokeObjectURL(a.href);}, 1000);
+$('io-msg').textContent = records.length + '件の馬と' + plans.length + '件の繁殖計画と' + ownHorses.length + '件の自分の馬を書き出しました。';
+$('io-error').textContent = '';
+});
+$('import-file').addEventListener('change', function (e) {
+var file = e.target.files && e.target.files[0];
+if (!file) return;
+var reader = new FileReader();
+reader.onload = function () {
+try {
+var data = JSON.parse(String(reader.result));
+var parsed = parseImportData(data, plans, ownHorses);
+records = parsed.records;
+plans = parsed.plans;
+ownHorses = parsed.ownHorses;
 saveAll(records);
 savePlans(plans);
-renderList(); renderPlans(); resetForm(); resetPlanForm();
-$('io-msg').textContent = records.length + '件の馬と' + plans.length + '件の繁殖計画を読み込みました（全件置き換え）。';
+saveOwnHorses(ownHorses);
+renderList(); renderPlans(); renderOwnHorses(); resetForm(); resetPlanForm();
+$('io-msg').textContent = records.length + '件の馬と' + plans.length + '件の繁殖計画と' + ownHorses.length + '件の自分の馬を読み込みました（全件置き換え）。';
 $('io-error').textContent = '';
 } catch (err) {
 /* 既存データは変えない */
@@ -1480,4 +1831,4 @@ if (triple[1] && triple[1].ranges) RANKS = triple[1];
 if (triple[2] && Array.isArray(triple[2].horses)) STALLIONS = triple[2];
 });
 }
-loadData().then(function () { renderList(); renderPlans(); updateGrowthBar(); renderStallionSearchStatus(); fillChiOptions();});
+loadData().then(function () { renderList(); renderPlans(); renderOwnHorses(); updateGrowthBar(); renderStallionSearchStatus(); fillChiOptions();});
