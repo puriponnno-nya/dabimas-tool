@@ -247,7 +247,7 @@
 
   <section aria-labelledby="plan-title">
     <h2 id="plan-title">繁殖計画（<span id="plan-count">0</span>件）</h2>
-    <p class="note">繁殖計画の記録だけです。配合のシミュレーションはまだありません。父馬・母馬は名前で入力します（登録馬や攻略データベースからの選択は後のステップで追加します）。</p>
+    <p class="note">繁殖計画の記録だけです。配合のシミュレーションはまだありません。父馬・母馬は名前で入力するか、上の種牡馬データベース検索から選べます（選ぶと血統も表示できます）。</p>
     <details class="ref-details">
       <summary>繁殖計画について（タップで開く）</summary>
       <p class="note">完成形は5代先までの配合シミュレーターを想定していますが、今は計画の記録（計画名・父馬・母馬・ステータス・メモ）だけです。配合効果の表示はありません。未確定の配合効果を断定表示しません。</p>
@@ -261,6 +261,36 @@
         <li><a href="https://takana666.github.io/DBMS_shikou_checker/" target="_blank" rel="noopener">至高種・組合せ検索（たかなさん）</a></li>
         <li><a href="https://x.com/mmmmdd_tw" target="_blank" rel="noopener">たかなさんのX（@mmmmdd_tw）</a></li>
       </ul>
+    </section>
+    <section aria-labelledby="db-search-title">
+      <h3 id="db-search-title">種牡馬データベース検索（ユーザー提供CSV・3021件）</h3>
+      <p class="note">ユーザーがダビマス全書／たかなさんのDBMS種牡馬データ検索から取得したCSV（2026-11-14入手）を、検索用に軽く変換したデータベースです。ユーザー検証・参考。データのコピーやスクレイピングではなく、ユーザーが渡したファイルを読み込んだものです。元のCSVはリポジトリに含めていません。配合の効果を断定する表示はしません。血統・因子・非凡・天性の表示だけです。</p>
+      <p class="note" id="s-status" role="status">データベースを読み込んでいます…</p>
+      <div class="row">
+        <label>馬名（部分一致）
+          <input id="s-name" type="text" autocomplete="off" placeholder="例：アイアンリージ">
+        </label>
+        <label>子系統
+          <select id="s-chi">
+            <option value="">指定なし</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>因子（部分一致）
+          <input id="s-factor" type="text" autocomplete="off" placeholder="例：長">
+        </label>
+        <label>非凡（部分一致）
+          <input id="s-hibon" type="text" autocomplete="off" placeholder="例：鉄情不羈">
+        </label>
+        <label>天性（部分一致）
+          <input id="s-talent" type="text" autocomplete="off" placeholder="例：飛燕">
+        </label>
+      </div>
+      <button type="button" id="s-search">🔍 検索する</button>
+      <p id="s-msg" role="status"></p>
+      <ul id="s-results"></ul>
+      <div id="s-detail"></div>
     </section>
     <form id="plan-form">
       <input type="hidden" id="plan-edit-id" value="">

@@ -17,6 +17,15 @@ var FALLBACK_RANKS = {"analysisStructure":{"middle":"中段はSPとSTのどち�
 var COMMENTS = FALLBACK_COMMENTS;
 var RANKS = FALLBACK_RANKS;
 
+/* 種牡馬データベース（data/stallions.json）。ユーザーがダビマス全書／
+   たかなさんのDBMS種牡馬データ検索から取得したCSV（2026-11-14入手）を
+   scripts/convert-stallions.py で変換したもの。ユーザー検証・参考。
+   元のCSVはリポジトリに含めない。3.9MBあるため app.js への内蔵コピーは
+   なし（file:// で開いたときは fetch が読めず検索は使えない）。 */
+var STALLIONS = null;
+var STALLION_URL_BASE = 'https://dabimas.jp/kouryaku/stallions/';
+var STALLION_SEARCH_LIMIT = 50;
+
 /* ---------- 正規化・あいまい照合 ---------- */
 /* よくある文字起こしのゆらぎを吸収する置換表（原文の意味を変えない範囲で） */
 var ALIASES = [
@@ -479,8 +488,61 @@ if (p[optText[j]] !== undefined && typeof p[optText[j]]!== 'string') return fals
 /* 将来の紐付け用。未紐付けは null。文字列なら登録馬のIDを指す想定。 */
 if (p.sireHorseId !== undefined && p.sireHorseId !== null && typeof p.sireHorseId!== 'string') return false;
 if (p.damHorseId !== undefined && p.damHorseId !== null && typeof p.damHorseId!== 'string') return false;
+/* DB検索からの選択：種牡馬データベース内の番号（整数）または null。 */
+if (p.sireDbIndex !== undefined && p.sireDbIndex !== null && (!Number.isInteger(p.sireDbIndex) || p.sireDbIndex < 0)) return false;
+if (p.damDbIndex !== undefined && p.damDbIndex !== null && (!Number.isInteger(p.damDbIndex) || p.damDbIndex < 0)) return false;
 return true;
 }
+
+/* ---------- 種牡馬データベース検索（ステップ2） ---------- */
+/* 検索と配合表示に必要な項目だけを残した data/stallions.json（3021件）を
+   読む。配合の効果を断定する表示はしない（配合理論の判定は後のステップ）。
+   同名の別バリエーション（例：アイアンリージ-巌瓏- / -煌魂-）は別レコード
+   のまま。空欄（非凡なし・天性なしなど）はそのまま扱う。 */
+function stallionLink(h) {
+  if (!h || !h.link) return '';
+  return String(h.link).indexOf('http') === 0 ? h.link : STALLION_URL_BASE + h.link + '.html';
+}
+/* 祖先 i（0〜14）の [名前, 親系統, 子系統, 因子1, 因子2]。末尾の空欄は
+   変換時に省いてあるので、5要素まで空文字で補う。 */
+function stallionAncestor(h, i) {
+  var a = (h && Array.isArray(h.anc)) ? (h.anc[i] || []) : [];
+  return { name: a[0] || '', pa: a[1] || '', chi: a[2] || '', f1: a[3] || '', f2: a[4] || '' };
+}
+function stallionFactors(h) {
+  return [h.f1, h.f2, h.f3].filter(function (x) { return x; }).join('／');
+}
+/* q: {name, chi, factor, hibon, talent}（すべて部分一致。chi だけ選択式の
+   完全一致）。何も条件がない場合は空配列（3021件を全部出さない）。
+   返り値は [{h, idx}]。 */
+function searchStallions(q) {
+  if (!STALLIONS || !Array.isArray(STALLIONS.horses)) return [];
+  q = q || {};
+  function norm(s) { return String(s || '').trim().toLowerCase(); }
+  var name = norm(q.name), chi = norm(q.chi), factor = norm(q.factor),
+      hibon = norm(q.hibon), talent = norm(q.talent);
+  if (!name && !chi && !factor && !hibon && !talent) return [];
+  var out = [];
+  STALLIONS.horses.forEach(function (h, idx) {
+    if (name && norm(h.n).indexOf(name) < 0) return;
+    if (chi && norm(h.chi) !== chi) return;
+    if (factor && norm([h.f1, h.f2, h.f3].join(' ')).indexOf(factor) < 0) return;
+    if (hibon && norm((h.hibon || '') + ' ' + (h.hk || '')).indexOf(hibon) < 0) return;
+    if (talent && norm(h.talent).indexOf(talent) < 0) return;
+    out.push({ h: h, idx: idx });
+  });
+  return out;
+}
+/* 子系統の選択肢（データにあるものだけ・五十音順）。 */
+function stallionChiOptions() {
+  if (!STALLIONS || !Array.isArray(STALLIONS.horses)) return [];
+  var seen = {};
+  STALLIONS.horses.forEach(function (h) { if (h.chi) seen[h.chi] = true; });
+  return Object.keys(seen).sort();
+}
+/* 検索で選んだ父馬・母馬（データベース内の番号。未選択は null）。 */
+var selectedDb = { sire: null, dam: null };
+var stallionResults = [];
 
 /* ---------- 画面 ---------- */
 var $ = function (id) { return document.getElementById(id);};
@@ -683,6 +745,93 @@ li.appendChild(editBtn); li.appendChild(delBtn);
 ul.appendChild(li);
 });
 }
+
+/* ---------- 種牡馬データベース検索の画面 ---------- */
+function renderStallionSearchStatus() {
+  var el = $('s-status');
+  if (!el) return;
+  if (!STALLIONS) { el.textContent = 'データベースを読み込めませんでした。サーバー経由で開き直してください（file:// で開いている場合は検索は使えません）。'; return; }
+  el.textContent = 'データベース ' + STALLIONS.count + '件を読み込み済み（ユーザー提供CSV・2026-11-14入手。ユーザー検証・参考）。';
+}
+function fillChiOptions() {
+  var sel = $('s-chi');
+  if (!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">指定なし</option>';
+  stallionChiOptions().forEach(function (c) {
+    var o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+  sel.value = cur;
+}
+function runStallionSearch() {
+  var msg = $('s-msg'), box = $('s-results');
+  if (!STALLIONS) { if (msg) msg.textContent = 'データベースが読み込めていません。'; return; }
+  stallionResults = searchStallions({
+    name: $('s-name').value, chi: $('s-chi').value, factor: $('s-factor').value,
+    hibon: $('s-hibon').value, talent: $('s-talent').value
+  });
+  var total = stallionResults.length;
+  if (msg) msg.textContent = total ? total + '件見つかりました' + (total > STALLION_SEARCH_LIMIT ? '（先頭' + STALLION_SEARCH_LIMIT + '件を表示）' : '') + '。' : '見つかりませんでした。条件を変えてください。';
+  if (!box) return;
+  box.innerHTML = '';
+  stallionResults.slice(0, STALLION_SEARCH_LIMIT).forEach(function (r) {
+    var h = r.h;
+    var li = document.createElement('li');
+    var link = stallionLink(h);
+    li.innerHTML = '<p class="name">' + esc(h.n || '') + '</p>'
+      + '<p class="meta">子系統 ' + esc(h.chi || '—') + '／因子 ' + esc(stallionFactors(h) || '—')
+      + '／距離 ' + esc(h.dist || '—') + '／成長 ' + esc(h.growth || '—')
+      + '／非凡 ' + esc(h.hibon || '—') + (h.hk ? '（' + esc(h.hk) + '）' : '')
+      + '／天性 ' + esc(h.talent || '—')
+      + (link ? '／<a href="' + esc(link) + '" target="_blank" rel="noopener">ダビマス全書で見る</a>' : '') + '</p>';
+    var detailBtn = document.createElement('button');
+    detailBtn.type = 'button'; detailBtn.textContent = '血統・詳細を見る';
+    detailBtn.addEventListener('click', function () { renderStallionDetail(r.idx); });
+    var sireBtn = document.createElement('button');
+    sireBtn.type = 'button'; sireBtn.textContent = '父馬に選ぶ';
+    sireBtn.addEventListener('click', function () { chooseStallionForPlan(r.idx, 'sire'); });
+    var damBtn = document.createElement('button');
+    damBtn.type = 'button'; damBtn.textContent = '母馬に選ぶ';
+    damBtn.addEventListener('click', function () { chooseStallionForPlan(r.idx, 'dam'); });
+    li.appendChild(detailBtn); li.appendChild(sireBtn); li.appendChild(damBtn);
+    box.appendChild(li);
+  });
+}
+function chooseStallionForPlan(idx, role) {
+  if (!STALLIONS || !STALLIONS.horses[idx]) return;
+  var name = STALLIONS.horses[idx].n || '';
+  if (role === 'sire') { $('p-sire').value = name; selectedDb.sire = idx; }
+  else { $('p-dam').value = name; selectedDb.dam = idx; }
+  var msg = $('s-msg');
+  if (msg) msg.textContent = (role === 'sire' ? '父馬' : '母馬') + 'に「' + name + '」を選びました。計画名を入れて「計画を登録」を押してください。';
+  renderStallionDetail(idx);
+}
+function renderStallionDetail(idx) {
+  var box = $('s-detail');
+  if (!box) return;
+  if (!STALLIONS || !STALLIONS.horses[idx]) { box.innerHTML = '<p class="note">データベースが読み込めていません。</p>'; return; }
+  var h = STALLIONS.horses[idx];
+  var labels = STALLIONS.ancestors || [];
+  var rows = '';
+  for (var i = 0; i < 15; i++) {
+    var a = stallionAncestor(h, i);
+    rows += '<tr><td>' + esc(labels[i] || ('祖先' + (i + 1))) + '</td><td>' + esc(a.name || '—') + '</td><td>' + esc(a.pa || '—') + '</td><td>' + esc(a.chi || '—') + '</td><td>' + esc([a.f1, a.f2].filter(function (x) { return x; }).join('／') || '—') + '</td></tr>';
+  }
+  var link = stallionLink(h);
+  box.innerHTML = '<h4>' + esc(h.n || '') + '（5代血統・参考）</h4>'
+    + '<p class="meta">子系統 ' + esc(h.chi || '—') + '／因子 ' + esc(stallionFactors(h) || '—')
+    + '／距離 ' + esc(h.dist || '—') + '／成長 ' + esc(h.growth || '—')
+    + '／適応力 ' + esc(h.adapt || '—') + '／体質 ' + esc(h.phys || '—') + '／気性 ' + esc(h.temp || '—')
+    + '／脚質 ' + esc(h.style || '—') + '／実績 ' + esc(h.record || '—') + '／底力 ' + esc(h.base || '—') + '／安定 ' + esc(h.stab || '—')
+    + '／非凡 ' + esc(h.hibon || '—') + (h.hk ? '（' + esc(h.hk) + '）' : '') + '／天性 ' + esc(h.talent || '—')
+    + (h.eff ? '<br>発揮効果（先頭のみ・参考）：' + esc(h.eff) : '')
+    + (link ? '<br><a href="' + esc(link) + '" target="_blank" rel="noopener">ダビマス全書で見る</a>' : '') + '</p>'
+    + '<table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>子系統</th><th>因子</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    + '<p class="note">配合の効果を断定する表示はしません。血統・因子・非凡・天性の表示だけです。配合理論の判定は後のステップです。</p>';
+  box.scrollIntoView();
+}
 function loadIntoForm(r) {
 $('edit-id').value = r.id;
 $('f-name').value = r.name;
@@ -785,6 +934,12 @@ resetPlanForm();
 });
 $('plan-cancel-edit').addEventListener('click', resetPlanForm);
 
+/* 種牡馬データベース検索：検索ボタンと、父馬・母馬名を手で直したときに
+   DB選択を外す処理（手入力の名前とDBの番号が食い違わないようにする）。 */
+$('s-search').addEventListener('click', runStallionSearch);
+$('p-sire').addEventListener('input', function () { selectedDb.sire = null; });
+$('p-dam').addEventListener('input', function () { selectedDb.dam = null; });
+
 /* メモリ欄に 1〜6 を手で入れたときも成長タイプに反映する */
 $('f-memory').addEventListener('input', function () {
   var mn = parseInt($('f-memory').value, 10);
@@ -802,6 +957,8 @@ sireName: $('p-sire').value.trim(),
 damName: $('p-dam').value.trim(),
 sireHorseId: null,
 damHorseId: null,
+sireDbIndex: selectedDb.sire,
+damDbIndex: selectedDb.dam,
 status: $('p-status').value,
 memo: $('p-memo').value.trim()
 };
@@ -811,6 +968,8 @@ $('plan-edit-id').value = p.id;
 $('p-name').value = p.name;
 $('p-sire').value = p.sireName || '';
 $('p-dam').value = p.damName || '';
+selectedDb.sire = (p.sireDbIndex === undefined || p.sireDbIndex === null) ? null : p.sireDbIndex;
+selectedDb.dam = (p.damDbIndex === undefined || p.damDbIndex === null) ? null : p.damDbIndex;
 $('p-status').value = p.status;
 $('p-memo').value = p.memo || '';
 $('plan-save-btn').textContent = '計画を更新';
@@ -821,6 +980,8 @@ window.scrollTo(0, 0);
 function resetPlanForm() {
 $('plan-edit-id').value = '';
 $('plan-form').reset();
+selectedDb.sire = null;
+selectedDb.dam = null;
 $('plan-save-btn').textContent = '計画を登録';
 $('plan-cancel-edit').hidden = true;
 $('plan-form-error').textContent = '';
@@ -833,7 +994,7 @@ ul.innerHTML = '';
 plans.forEach(function (p) {
 var li = document.createElement('li');
 li.innerHTML = '<p class="name">' + esc(p.name) + '</p>'
-+ '<p class="meta">' + '父 ' + esc(p.sireName || '—') + ' × 母 ' + esc(p.damName || '—')
++ '<p class="meta">' + '父 ' + esc(p.sireName || '—') + (p.sireDbIndex !== null && p.sireDbIndex !== undefined ? '（DB検索から選択）' : '') + ' × 母 ' + esc(p.damName || '—') + (p.damDbIndex !== null && p.damDbIndex !== undefined ? '（DB検索から選択）' : '')
 + '\nステータス ' + esc(p.status)
 + (p.memo? '\nメモ：' + esc(p.memo): '') + '</p>'
 + '<p class="note">配合のシミュレーションはまだありません。記録だけです。</p>';
@@ -848,6 +1009,18 @@ plans = plans.filter(function (x) { return x.id!== p.id;});
 savePlans(plans); renderPlans();
 });
 li.appendChild(editBtn); li.appendChild(delBtn);
+if (p.sireDbIndex !== null && p.sireDbIndex !== undefined) {
+var sireDetailBtn = document.createElement('button');
+sireDetailBtn.type = 'button'; sireDetailBtn.textContent = '父馬の血統を見る';
+sireDetailBtn.addEventListener('click', function () { renderStallionDetail(p.sireDbIndex); });
+li.appendChild(sireDetailBtn);
+}
+if (p.damDbIndex !== null && p.damDbIndex !== undefined) {
+var damDetailBtn = document.createElement('button');
+damDetailBtn.type = 'button'; damDetailBtn.textContent = '母馬の血統を見る';
+damDetailBtn.addEventListener('click', function () { renderStallionDetail(p.damDbIndex); });
+li.appendChild(damDetailBtn);
+}
 ul.appendChild(li);
 });
 }
@@ -952,10 +1125,12 @@ reader.readAsText(file);
 function loadData() {
 return Promise.all([
 fetch('./data/comments.json').then(function (r) { if (!r.ok) throw new Error('comments'); return r.json();}).catch(function () { return null;}),
-fetch('./data/ranks.json').then(function (r) { if (!r.ok) throw new Error('ranks'); return r.json();}).catch(function () { return null;})
-]).then(function (pair) {
-if (pair[0] && Array.isArray(pair[0].cmt)) COMMENTS = pair[0];
-if (pair[1] && pair[1].ranges) RANKS = pair[1];
+fetch('./data/ranks.json').then(function (r) { if (!r.ok) throw new Error('ranks'); return r.json();}).catch(function () { return null;}),
+fetch('./data/stallions.json').then(function (r) { if (!r.ok) throw new Error('stallions'); return r.json();}).catch(function () { return null;})
+]).then(function (triple) {
+if (triple[0] && Array.isArray(triple[0].cmt)) COMMENTS = triple[0];
+if (triple[1] && triple[1].ranges) RANKS = triple[1];
+if (triple[2] && Array.isArray(triple[2].horses)) STALLIONS = triple[2];
 });
 }
-loadData().then(function () { renderList(); renderPlans(); updateGrowthBar();});
+loadData().then(function () { renderList(); renderPlans(); updateGrowthBar(); renderStallionSearchStatus(); fillChiOptions();});

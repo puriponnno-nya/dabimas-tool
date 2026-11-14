@@ -104,3 +104,8 @@ section {
   border-radius: 24px; padding: 4px 16px 16px; margin-top: 18px;
 }
 footer { margin-top: 26px; }
+/* 種牡馬データベース検索の血統表（5代・参考表示） */
+#s-detail table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; }
+#s-detail th, #s-detail td { border: 1px solid #2c3f7d; padding: 4px 6px; text-align: left; }
+#s-detail th { color: #ffd34d; }
+#s-results li, #s-detail { margin-bottom: 10px; }
