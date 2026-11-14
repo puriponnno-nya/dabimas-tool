@@ -551,6 +551,10 @@ if (h[optText[k]] !== undefined && typeof h[optText[k]] !== 'string') return fal
 }
 /* どの世代の子か（世代のID。旧形式の自分の馬にはない）。 */
 if (h.generationId !== undefined && typeof h.generationId !== 'string') return false;
+/* 由来（どの計画の第何世代の子か）。登録時に記録する。ない旧形式の
+   自分の馬は由来不明として扱う（表示も枝の展開もしない）。 */
+if (h.originPlanName !== undefined && h.originPlanName !== null && typeof h.originPlanName !== 'string') return false;
+if (h.originGenerationNo !== undefined && h.originGenerationNo !== null && (!Number.isInteger(h.originGenerationNo) || h.originGenerationNo < 1)) return false;
 if (h.sireDbIndex !== undefined && h.sireDbIndex !== null && (!Number.isInteger(h.sireDbIndex) || h.sireDbIndex < 0)) return false;
 if (h.damDbIndex !== undefined && h.damDbIndex !== null && (!Number.isInteger(h.damDbIndex) || h.damDbIndex < 0)) return false;
 if (h.sireOwnId !== undefined && h.sireOwnId !== null && typeof h.sireOwnId !== 'string') return false;
@@ -561,6 +565,40 @@ function findOwnHorse(id) {
 if (!id) return null;
 for (var i = 0; i < ownHorses.length; i++) { if (ownHorses[i].id === id) return ownHorses[i]; }
 return null;
+}
+function findPlanById(id) {
+if (!id || typeof plans === 'undefined' || !Array.isArray(plans)) return null;
+for (var i = 0; i < plans.length; i++) { if (plans[i].id === id) return plans[i]; }
+return null;
+}
+/* 自分の馬の由来表示。「計画名」第N世代の子。由来が記録されていない
+   旧形式の馬は「由来不明」。 */
+function ownHorseOriginLabel(o) {
+if (!o) return '由来不明';
+if (typeof o.originPlanName === 'string' && o.originPlanName.trim() &&
+Number.isInteger(o.originGenerationNo) && o.originGenerationNo >= 1) {
+return '「' + o.originPlanName + '」第' + o.originGenerationNo + '世代の子';
+}
+return '由来不明';
+}
+/* 自分の馬を生んだ世代（計画＋世代）を探す。由来が記録されている馬だけが
+   対象。由来不明の馬は null。由来の計画・世代が見つからない場合は
+   {missingPlan: true}／{missingGeneration: true, plan} を返す（枝なしで
+   箱だけ表示し、その旨を注記する）。 */
+function originGenerationOf(o) {
+if (!o || !o.originPlanName || !o.originGenerationNo) return null;
+var plan = findPlanById(o.planId);
+if (!plan) return { missingPlan: true };
+var gens = planGenerations(plan);
+var gen = null, genNo = 0;
+for (var i = 0; i < gens.length; i++) {
+if (o.generationId && gens[i].id === o.generationId) { gen = gens[i]; genNo = i + 1; break; }
+}
+if (!gen && o.originGenerationNo >= 1 && o.originGenerationNo <= gens.length) {
+gen = gens[o.originGenerationNo - 1]; genNo = o.originGenerationNo;
+}
+if (!gen) return { missingGeneration: true, plan: plan };
+return { plan: plan, gen: gen, genNo: genNo };
 }
 /* 自家生産馬を、血統の組み立て・配合理論・インブリードで使う形
    {n, chi, f1, f2, anc} にそろえる。DB馬はそのままの形。
@@ -683,9 +721,22 @@ sireOwnId: refs.sireOwnId || null,
 damOwnId: refs.damOwnId || null,
 planId: planId || '',
 generationId: generationId || '',
+originPlanName: '',
+originGenerationNo: null,
 generation: childGeneration(sireRef, damRef),
 anc: anc, createdAt: now, updatedAt: now
 };
+/* 由来（どの計画の第何世代の子か）を記録する。計画が一覧にあれば名前と
+   世代番号を入れる。計画が見つからない場合は由来不明のままにする。 */
+var originPlan = findPlanById(planId);
+if (originPlan) {
+rec.originPlanName = originPlan.name || '';
+var og = planGenerations(originPlan);
+for (var oi = 0; oi < og.length; oi++) {
+if (generationId && og[oi].id === generationId) { rec.originGenerationNo = oi + 1; break; }
+}
+if (!rec.originGenerationNo && og.length === 1) rec.originGenerationNo = 1;
+}
 if (!validOwnHorse(rec)) return { ok: false, error: '子の登録データを作れませんでした' };
 ownHorses.push(rec);
 saveOwnHorses(ownHorses);
@@ -1351,7 +1402,7 @@ if (!e.status) return;
 var ownId = ctx.store.getOwn(ctx.role);
 if (ownId) {
 var o = findOwnHorse(ownId);
-e.status.textContent = o? '自家生産馬から選択：' + o.name + '（' + o.sex + '・' + o.generation + '代目）'
+e.status.textContent = o? '自家生産馬から選択：' + o.name + '（' + o.sex + '・' + o.generation + '代目／' + ownHorseOriginLabel(o) + '）'
 : '自家生産馬から選択済みですが、見つかりません（削除された可能性があります）。';
 return;
 }
@@ -1382,7 +1433,7 @@ btn.type = 'button';
 btn.textContent = '【自家生産馬】' + o.name;
 var meta = document.createElement('span');
 meta.className = 'suggest-meta';
-meta.textContent = o.sex + '・' + o.generation + '代目／父 ' + (o.sireName || '—') + ' × 母 ' + (o.damName || '—');
+meta.textContent = o.sex + '・' + o.generation + '代目／' + ownHorseOriginLabel(o) + '／父 ' + (o.sireName || '—') + ' × 母 ' + (o.damName || '—');
 btn.appendChild(meta);
 btn.addEventListener('mousedown', function (ev) {
 if (ev && ev.preventDefault) ev.preventDefault();
@@ -1927,6 +1978,7 @@ function routeParentBox(gen, role, prevChildGenNo) {
     if (ownId) {
       var o = findOwnHorse(ownId);
       if (o && o.generation) note += '・' + o.generation + '代目';
+      note += '・' + ownHorseOriginLabel(o);
     }
     if (ownId && prevChildGenNo && prevChildGenNo[ownId]) note += '・第' + prevChildGenNo[ownId] + '世代の子';
     return { role: role, kind: role, name: resolved.n || name, note: note };
@@ -1981,6 +2033,12 @@ function buildRouteDiagram(plan) {
     columns: columns, matings: matings };
 }
 function buildRouteDiagramHtml(plan) {
+  /* 別の計画の子を親に選んだ計画（複数ルートの掛け合わせ）は、父方・母方
+     両方の枝が最終の子で合流する統合図にする。それ以外は今までの1ルートの図。 */
+  if (planHasCrossRouteAncestry(plan)) {
+    var mh = buildMergedRouteDiagramHtml(plan);
+    if (mh) return mh;
+  }
   var d = buildRouteDiagram(plan);
   if (!d) return '';
   var html = '<details class="route-diagram" open><summary>配合ルート図を見る（参考・未検証）</summary>';
@@ -2009,6 +2067,190 @@ function buildRouteDiagramHtml(plan) {
     html += '</div>';
   });
   html += '</div></div></details>';
+  return html;
+}
+
+/* ---------- 配合ルート図（複数ルート統合・ステップ8） ---------- */
+/* 別の計画（ルート）の最後の子をこの計画の父・母として選んだ場合、その子の
+   由来の計画の世代列をたどって、父方ルートと母方ルートの両方の枝を出す。
+   最終の子を根（左端）とし、親を右へたどる木構造。1つの配合＝1つの節で、
+   子の箱＋その配合の理論ラベル＋父の枝・母の枝を持つ。父・母が自家生産馬で
+   由来が分かる場合は、その馬を生んだ配合を枝として展開する（再帰。循環
+   参照は seen で防ぎ、深さは MERGED_ROUTE_MAX_DEPTH まで）。由来が分から
+   ない自分の馬・由来の計画や世代が見つからない馬は、枝なしで箱だけ表示
+   する。DBの馬・名前だけの入力・未入力も箱だけ。
+   すべて参考・未検証で、配合の効果を断定しない。
+   buildMergedRouteDiagram／buildMergedRouteDiagramHtml は表示用の純粋な
+   データとHTML（DOMを使わない部分）で、scripts/test-merged-route.js で
+   自動確認する。 */
+var MERGED_ROUTE_MAX_DEPTH = 12;
+function mergedTheoryForGen(gen) {
+  var pair = resolveGenerationParents(gen);
+  if (pair) {
+    var t = routeTheoryLabel(pair.sire, pair.dam);
+    return { status: 'ok', label: t.label, hits: t.hits, dangerous: t.dangerous };
+  }
+  if (generationHasAnyParentRef(gen)) return { status: 'missing', label: null, hits: [], dangerous: false };
+  return { status: 'no-ref', label: null, hits: [], dangerous: false };
+}
+/* 1頭分の枝の節。mating がある場合だけ、その馬を生んだ配合へ展開する。
+   kind: 'db'／'own'（解決できた親）、'missing'（選んだ親が見つからない）、
+   'name-only'（名前だけの入力）、'empty'（未入力）。 */
+function mergedParentNode(gen, role, seen, depth) {
+  var isSire = role === 'sire';
+  var name = String((isSire ? gen.sireName : gen.damName) || '').trim();
+  var ownId = isSire ? gen.sireOwnId : gen.damOwnId;
+  var dbIndex = isSire ? gen.sireDbIndex : gen.damDbIndex;
+  var hasRef = (dbIndex !== null && dbIndex !== undefined) || !!ownId;
+  if (hasRef && ownId) {
+    var o = findOwnHorse(ownId);
+    if (!o) {
+      return { role: role, kind: 'missing', name: '親が見つかりません',
+        note: '選んだ' + (isSire ? '父馬' : '母馬') + 'が見つかりません（自家生産馬が削除された可能性があります）', mating: null };
+    }
+    var node = { role: role, kind: 'own', name: o.name, sex: o.sex,
+      note: '自家生産馬' + (o.generation ? '・' + o.generation + '代目' : '') + '・' + ownHorseOriginLabel(o),
+      mating: null, originStatus: 'unknown' };
+    if (seen[o.id]) {
+      node.originStatus = 'cycle';
+      node.note += '（循環参照のためこれ以上たどれません）';
+      return node;
+    }
+    var og = originGenerationOf(o);
+    if (!og) return node;
+    if (og.missingPlan) {
+      node.originStatus = 'missing-plan';
+      node.note += '（由来の計画が見つかりません）';
+      return node;
+    }
+    if (og.missingGeneration) {
+      node.originStatus = 'missing-generation';
+      node.note += '（由来の世代が見つかりません）';
+      return node;
+    }
+    if (depth >= MERGED_ROUTE_MAX_DEPTH) {
+      node.originStatus = 'too-deep';
+      node.note += '（これ以上たどれません）';
+      return node;
+    }
+    var seen2 = {};
+    for (var k in seen) seen2[k] = true;
+    seen2[o.id] = true;
+    node.mating = mergedMatingNode(og.plan, og.gen, og.genNo, seen2, depth + 1);
+    node.originStatus = 'ok';
+    return node;
+  }
+  if (hasRef && dbIndex !== null && dbIndex !== undefined) {
+    var h = (STALLIONS && Array.isArray(STALLIONS.horses)) ? STALLIONS.horses[dbIndex] : null;
+    if (!h) {
+      return { role: role, kind: 'missing', name: '親が見つかりません',
+        note: '選んだ' + (isSire ? '父馬' : '母馬') + 'が見つかりません（DBが読み込めていません）', mating: null };
+    }
+    return { role: role, kind: role, name: h.n || '', note: 'DB', mating: null };
+  }
+  if (hasRef) {
+    return { role: role, kind: 'missing', name: '親が見つかりません',
+      note: '選んだ' + (isSire ? '父馬' : '母馬') + 'が見つかりません（DBが読み込めていないか、自家生産馬が削除された可能性があります）', mating: null };
+  }
+  if (name) {
+    return { role: role, kind: 'name-only', name: name,
+      note: '名前だけの入力（DB・自家生産馬から未選択）のため血統・配合理論は確認できません', mating: null };
+  }
+  return { role: role, kind: 'empty', name: '（未入力）', note: '', mating: null };
+}
+/* 1つの配合の節。childName はその配合の子（最終の子の場合は最終の子、
+   枝の場合は由来の自分の馬）の名前。 */
+function mergedMatingNode(plan, gen, genNo, seen, depth) {
+  var m = { planName: plan.name, planId: plan.id, genNo: genNo,
+    childName: String(gen.childName || '').trim() || defaultGenerationChildName(plan, genNo),
+    childSex: gen.childSex || '不明',
+    theory: mergedTheoryForGen(gen), sire: null, dam: null };
+  m.sire = mergedParentNode(gen, 'sire', seen, depth);
+  m.dam = mergedParentNode(gen, 'dam', seen, depth);
+  return m;
+}
+/* 計画の最終の子の血統ルートを木構造で作る。根は最終の世代の配合。
+   matingCount は図に出る配合の数、planNames は図に出る計画名、
+   horseNames は図に出る馬名（子の箱・親の箱のすべて。重複なし）。 */
+function buildMergedRouteDiagram(plan) {
+  var gens = planGenerations(plan);
+  if (!gens.length) return null;
+  var n = gens.length;
+  var root = mergedMatingNode(plan, gens[n - 1], n, {}, 0);
+  var d = { planName: plan.name, generationCount: n,
+    finalChildName: String(gens[n - 1].childName || '').trim() || defaultGenerationChildName(plan, n),
+    root: root, merged: true, matingCount: 0, planNames: [], horseNames: [], maxDepth: 0 };
+  function collectNames(m, depth) {
+    if (!m) return;
+    d.matingCount++;
+    if (d.planNames.indexOf(m.planName) < 0) d.planNames.push(m.planName);
+    if (depth > d.maxDepth) d.maxDepth = depth;
+    [m.childName, m.sire && m.sire.name, m.dam && m.dam.name].forEach(function (nm) {
+      if (nm && d.horseNames.indexOf(nm) < 0) d.horseNames.push(nm);
+    });
+    [m.sire, m.dam].forEach(function (h) { if (h && h.mating) collectNames(h.mating, depth + 1); });
+  }
+  collectNames(root, 0);
+  return d;
+}
+/* 最終の世代の先祖に、別の計画の子（由来の計画がこの計画と違う自分の馬）
+   がいるかどうか。いる場合だけ統合図を使う。 */
+function planHasCrossRouteAncestry(plan) {
+  if (!plan) return false;
+  var gens = planGenerations(plan);
+  if (!gens.length) return false;
+  var seen = {};
+  function checkGen(gen, depth) {
+    if (!gen || depth > MERGED_ROUTE_MAX_DEPTH) return false;
+    var ownIds = [gen.sireOwnId, gen.damOwnId];
+    for (var i = 0; i < ownIds.length; i++) {
+      var o = ownIds[i] ? findOwnHorse(ownIds[i]) : null;
+      if (!o || seen[o.id]) continue;
+      seen[o.id] = true;
+      var og = originGenerationOf(o);
+      if (!og || og.missingPlan || og.missingGeneration) continue;
+      if (og.plan.id !== plan.id) return true;
+      if (checkGen(og.gen, depth + 1)) return true;
+    }
+    return false;
+  }
+  return checkGen(gens[gens.length - 1], 0);
+}
+function mergedHorseBoxHtml(h) {
+  var cls = h.kind === 'sire' ? 'route-sire' : h.kind === 'dam' ? 'route-dam' :
+    h.kind === 'own' ? (h.sex === '牝' ? 'route-dam' : 'route-sire') : 'route-missing';
+  var roleText = h.role === 'sire' ? '父（種牡馬）' : '母（繁殖牝馬）';
+  return '<div class="route-box ' + cls + '"><span class="route-role">' + roleText + '</span><span class="route-name">' + esc(h.name || '—') + '</span>' +
+    (h.note ? '<span class="route-note">' + esc(h.note) + '</span>' : '') + '</div>';
+}
+function mergedBranchHtml(h) {
+  if (!h) return '';
+  if (h.mating) return mergedMatingHtml(h.mating);
+  return '<div class="merge-branch">' + mergedHorseBoxHtml(h) + '</div>';
+}
+function mergedMatingHtml(m) {
+  var html = '<div class="merge-mating"><div class="merge-child-col">';
+  html += '<div class="route-box route-child"><span class="route-role">子</span><span class="route-name">' + esc(m.childName) + '</span>' +
+    '<span class="route-note">' + esc('「' + m.planName + '」第' + m.genNo + '世代の子・' + (m.childSex || '不明')) + '</span></div>';
+  var th = m.theory;
+  if (th.status === 'ok') {
+    html += '<p class="route-theory">「' + esc(m.planName) + '」第' + m.genNo + '世代：' + esc(th.label) + '（参考・未検証）' +
+      (th.dangerous ? '／危険な配合の条件に当てはまるように見えます（参考）' : '') + '</p>';
+  } else if (th.status === 'missing') {
+    html += '<p class="route-theory route-theory-missing">「' + esc(m.planName) + '」第' + m.genNo + '世代：親が見つかりません — この世代の配合理論は確認できません（計画自体は残っています）</p>';
+  } else {
+    html += '<p class="route-theory route-theory-missing">「' + esc(m.planName) + '」第' + m.genNo + '世代：父・母をDBまたは自家生産馬から選ぶと配合理論を確認できます</p>';
+  }
+  html += '</div><div class="route-arrow" aria-hidden="true">←</div>';
+  html += '<div class="merge-parents">' + mergedBranchHtml(m.sire) + mergedBranchHtml(m.dam) + '</div></div>';
+  return html;
+}
+function buildMergedRouteDiagramHtml(plan) {
+  var d = buildMergedRouteDiagram(plan);
+  if (!d || !d.root) return '';
+  var html = '<details class="route-diagram" open><summary>配合ルート図（複数ルート統合）を見る（参考・未検証）</summary>';
+  html += '<p class="note">左が最終の子、右へ行くほど前の世代です。上の枝が父方のルート、下の枝が母方のルートで、最終の子のところで合流します。青い箱が種牡馬、ピンクの箱が繁殖牝馬です。矢印（←）は親から子へのつながりです。各配合の箱には由来の計画名と第何世代の子かを付けています（由来が記録されていない自分の馬は「由来不明」と表示し、枝は出しません）。配合理論の判定はユーザー攻略記事による推定・共有情報で、すべて参考・未検証です。配合の効果を断定する表示はしません。</p>';
+  html += '<div class="route-scroll merge-scroll"><div class="merge-tree">' + mergedMatingHtml(d.root) + '</div></div></details>';
   return html;
 }
 function loadIntoForm(r) {
@@ -2511,7 +2753,7 @@ var labels = (STALLIONS && STALLIONS.ancestors) ? STALLIONS.ancestors : CHILD_PE
 ownHorses.forEach(function (o) {
 var li = document.createElement('li');
 li.innerHTML = '<p class="name">' + esc(o.name) + '【自家生産馬】</p>'
-+ '<p class="meta">' + '性別 ' + esc(o.sex) + '／' + o.generation + '代目'
++ '<p class="meta">' + '性別 ' + esc(o.sex) + '／' + o.generation + '代目／' + esc(ownHorseOriginLabel(o))
 + '／父 ' + esc(o.sireName || '—') + ' × 母 ' + esc(o.damName || '—') + '</p>';
 var det = document.createElement('details');
 det.className = 'ref-details';

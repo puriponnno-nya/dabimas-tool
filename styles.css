@@ -165,6 +165,17 @@ footer { margin-top: 26px; }
   border-radius: 12px; padding: 6px 8px; margin: 0;
 }
 .route-theory-missing { background: #1a1a2e; color: #aab8dd; }
+/* 配合ルート図（複数ルート統合・ステップ8）：最終の子の血統ルートを
+   木構造でたどる。左が最終の子、右へ行くほど前の世代。上の枝が父方、
+   下の枝が母方のルート。横にスクロールできる（iPhone縦画面でもはみ出さない）。
+   箱は縮まない（flex: 0 0 auto）ので、枝が増えても表示が崩れない。 */
+.merge-tree { display: flex; align-items: center; min-width: max-content; }
+.merge-mating { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.merge-child-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; min-width: 150px; max-width: 190px; }
+.merge-parents { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
+.merge-branch { display: flex; align-items: center; flex: 0 0 auto; }
+.merge-tree .route-box { flex: 0 0 auto; min-width: 150px; max-width: 190px; }
+.merge-tree .route-theory { flex: 0 0 auto; }
 /* 1つの計画での多世代の配合（ステップ5）：世代ごとの枠 */
 .generation {
   border: 1px solid #2c3f7d; border-radius: 20px; padding: 12px 14px;
