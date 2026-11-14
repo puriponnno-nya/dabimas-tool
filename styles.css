@@ -129,3 +129,11 @@ footer { margin-top: 26px; }
 /* 計画の子を次の配合の親として登録する欄 */
 .child-register { border: 1px dashed #4a63b8; border-radius: 16px; padding: 8px 12px; margin: 8px 0; }
 .child-register input, .child-register select { margin: 4px 8px 4px 0; }
+/* 1つの計画での多世代の配合（ステップ5）：世代ごとの枠 */
+.generation {
+  border: 1px solid #2c3f7d; border-radius: 20px; padding: 12px 14px;
+  margin: 12px 0; background: #0e1330;
+}
+.generation h3 { margin: 4px 0 6px; color: #ffd34d; }
+.gen-editor { margin: 8px 0; }
+.gen-next, .gen-delete { margin: 8px 0; }

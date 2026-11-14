@@ -79,6 +79,15 @@ function fakeHorse(name, paByIdx, nameByIdx, factorByIdx) {
   return { n: name, anc };
 }
 
+/* 要素自身または子孫の innerHTML に text があるか（世代ブロックは
+   子要素の innerHTML に入るため、計画カードの確認に使う）。 */
+function htmlContains(el, text) {
+  if (!el) return false;
+  if (typeof el.innerHTML === 'string' && el.innerHTML.indexOf(text) >= 0) return true;
+  if (!Array.isArray(el.children)) return false;
+  return el.children.some((c) => htmlContains(c, text));
+}
+
 (async () => {
   await sleep(100); // loadData() の fetch 完了を待つ
   const C = sandbox;
@@ -232,13 +241,13 @@ function fakeHorse(name, paByIdx, nameByIdx, factorByIdx) {
   C.renderPlans();
   const planLis = getEl('plan-list').children;
   check('M27', 'DB両方選択の計画には「子の血統・配合理論を見る」が出る',
-    planLis.length === 3 && planLis[0].innerHTML.includes('子の血統・配合理論を見る') &&
-    planLis[0].innerHTML.includes('ブルリー'), 'lis=' + planLis.length);
+    planLis.length === 3 && htmlContains(planLis[0], '子の血統・配合理論を見る') &&
+    htmlContains(planLis[0], 'ブルリー'), 'lis=' + planLis.length);
   check('M28', '名前だけの計画にはボタンが出ず、DBまたは自家生産馬から選ぶ旨だけ出る',
-    !planLis[1].innerHTML.includes('子の血統・配合理論を見る') &&
-    planLis[1].innerHTML.includes('DBまたは自家生産馬から父・母を選ぶと確認できます'));
+    !htmlContains(planLis[1], '子の血統・配合理論を見る') &&
+    htmlContains(planLis[1], 'DBまたは自家生産馬から父・母を選ぶと確認できます'));
   check('M29', '片方だけDB選択の計画にもボタンは出ない',
-    !planLis[2].innerHTML.includes('子の血統・配合理論を見る'));
+    !htmlContains(planLis[2], '子の血統・配合理論を見る'));
   check('M30', 'planHasDbPair の判定',
     C.planHasDbPair({ sireDbIndex: 0, damDbIndex: 3 }) === true &&
     C.planHasDbPair({ sireDbIndex: 0, damDbIndex: null }) === false &&
@@ -263,7 +272,6 @@ function fakeHorse(name, paByIdx, nameByIdx, factorByIdx) {
   check('R05', '回帰：index.html に繁殖計画の子の血統・理論の説明がある',
     html.includes('子の血統・配合理論の確認') && html.includes('ユーザー提供CSV') &&
     html.includes('配合の効果を断定する表示はしません'));
-
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('HARNESS ERROR', e); process.exit(2); });

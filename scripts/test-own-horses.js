@@ -90,6 +90,14 @@ function hasButtonText(el, text) {
 if (!el ||!Array.isArray(el.children)) return false;
 return el.children.some((c) => c.textContent === text || hasButtonText(c, text));
 }
+/* 要素自身または子孫の innerHTML に text があるか（世代ブロックは
+   子要素の innerHTML に入るため、計画カードの確認に使う）。 */
+function htmlContains(el, text) {
+if (!el) return false;
+if (typeof el.innerHTML === 'string' && el.innerHTML.indexOf(text) >= 0) return true;
+if (!Array.isArray(el.children)) return false;
+return el.children.some((c) => htmlContains(c, text));
+}
 
 (async () => {
 await sleep(100); // loadData() の fetch 完了を待つ
@@ -138,7 +146,7 @@ check('O07', '登録した子は別のキーに保存される（馬・計画の
 const raw = store[C.LS_OWN_KEY];
 if (!raw) return false;
 const data = JSON.parse(raw);
-return data.version === 1 && Array.isArray(data.ownHorses) && data.ownHorses.length === 1 &&
+return data.version === C.DATA_VERSION && Array.isArray(data.ownHorses) && data.ownHorses.length === 1 &&
 data.ownHorses[0].id === gen2.id && C.LS_OWN_KEY!== C.LS_PLANS_KEY && C.LS_OWN_KEY!== C.LS_KEY;
 })());
 check('O08', '子の名前はユーザーが決められる（指定した名前で登録される）',
@@ -350,8 +358,8 @@ hasButtonText(planLis[0], '子を登録する') &&
 hasButtonText(planLis[2], '子を登録する'),
 'lis=' + planLis.length);
 check('O35', '自家生産馬を親にした計画カードにも子の血統・配合理論が出る',
-planLis[2].innerHTML.includes('子の血統・配合理論を見る') &&
-planLis[2].innerHTML.includes('牡馬テスト'));
+htmlContains(planLis[2], '子の血統・配合理論を見る') &&
+htmlContains(planLis[2], '牡馬テスト'));
 C.ownHorses = [ownMale, ownUnknown];
 C.renderOwnHorses();
 const ownLis = getEl('own-list').children;
