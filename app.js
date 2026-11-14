@@ -1632,6 +1632,25 @@ function buildChildPedigree(sire, dam) {
   }
   return rows;
 }
+/* クロス判定用の馬名の正規化（同馬の表記違いを吸収する）。
+   データベースの馬名には、同じ馬の因名違い・年号違いの別バリエーション
+   がある（例：ダンチヒ1992／ダンチヒ-瞬走-／ダンチヒ-覇閃- は同馬。
+   しまむら牧場 note「ダンチヒ瞬走は同名の種牡馬（ダンチヒ1992 or
+   ダンチヒ覇閃）でも代用可能」。るんば note「同一馬の因名違いによる
+   全兄弟クロスは奇跡の配合が成立します」）。一方、祖先名の側は素の
+   馬名（例：ダンチヒ）で出る。完全一致だけではこのクロスを見逃す。
+   正規化：先頭の「-」以降（因名部分）を落とし、末尾の4桁の年号を落とす。
+   監査済み（2026-11-14）：このDBでは正規化後の1650の素名のうち447が
+   複数レコードを持つが、血統（anc）が異なるグループは0件。つまり
+   同じ素名はこのDBでは常に同じ血統の馬で、正規化で別馬を誤って
+   同一視することはない。すべて参考・未検証。 */
+function normalizeCrossName(name) {
+  var s = String(name || '').trim();
+  var hy = s.indexOf('-');
+  if (hy > 0) s = s.slice(0, hy);
+  s = s.replace(/[0-9]{4}$/, '');
+  return s;
+}
 /* インブリード判定用の両サイドの位置一覧。父方＝子の父（1代）と父馬由来の
    7位置、母方＝子の母（1代）と母馬由来の7位置。 */
 function childPedigreeSides(sire, dam) {
@@ -1649,8 +1668,12 @@ function findInbreeding(sire, dam) {
   var byName = {};
   function add(p, side) {
     if (!p.name) return;
-    var e = byName[p.name];
-    if (!e) { e = { name: p.name, sire: [], dam: [], f1: '', f2: '' }; byName[p.name] = e; }
+    /* 同馬の表記違い（ダンチヒ／ダンチヒ1992 など）は正規化して同一視する。 */
+    var key = normalizeCrossName(p.name);
+    if (!key) return;
+    var e = byName[key];
+    if (!e) { e = { name: key, forms: [], sire: [], dam: [], f1: '', f2: '' }; byName[key] = e; }
+    if (e.forms.indexOf(p.name) < 0) e.forms.push(p.name);
     e[side].push(p);
     if (!e.f1 && p.f1) e.f1 = p.f1;
     if (!e.f2 && p.f2) e.f2 = p.f2;
@@ -1668,7 +1691,7 @@ function findInbreeding(sire, dam) {
       });
     });
     pairs.sort(function (a, b) { return (a.sireGen - b.sireGen) || (a.damGen - b.damGen); });
-    out.push({ name: name, pairs: pairs, f1: e.f1, f2: e.f2 });
+    out.push({ name: name, forms: e.forms, pairs: pairs, f1: e.f1, f2: e.f2 });
   });
   out.sort(function (a, b) { return (a.pairs[0].sireGen + a.pairs[0].damGen) - (b.pairs[0].sireGen + b.pairs[0].damGen); });
   return out;
@@ -1722,16 +1745,21 @@ function distinctKinds(list) {
 function checkMiracleCross(sire, dam) {
   /* 4×3のクロス（奇跡の配合用）。子の血統表の rows[12]（母母父・3代前）と、
      種牡馬側の4代前 rows[3,4,6,7]（父父父父／父父母父／父母父父／父母母父）の
-     名前が一致すれば成立。返り値は {hit, name, sireLabel} または {hit:false}。 */
+     名前が一致すれば成立。返り値は {hit, name, sireLabel} または {hit:false}。
+     名前は正規化して比べる（ダンチヒ／ダンチヒ1992 など同馬の表記違いを
+     同一視する。出典：しまむら牧場 note、るんば note）。name は正規化後の
+     素名。sireName／damName は元の表記（表示用）。 */
   var rows = buildChildPedigree(sire, dam);
   if (!rows) return { hit: false };
   var dam3 = rows[12];
   if (!dam3 || !dam3.name) return { hit: false };
+  var dam3Base = normalizeCrossName(dam3.name);
+  if (!dam3Base) return { hit: false };
   var sire4Idx = [3, 4, 6, 7];
   for (var i = 0; i < sire4Idx.length; i++) {
     var r = rows[sire4Idx[i]];
-    if (r && r.name && r.name === dam3.name) {
-      return { hit: true, name: dam3.name, sireLabel: r.label, damLabel: dam3.label };
+    if (r && r.name && normalizeCrossName(r.name) === dam3Base) {
+      return { hit: true, name: dam3Base, sireLabel: r.label, damLabel: dam3.label, sireName: r.name, damName: dam3.name };
     }
   }
   return { hit: false };
@@ -1814,7 +1842,9 @@ function matingTheorySummaryHtml(th) {
     html += '<li>超完璧な配合：当てはまりません — 見事な配合が成立し、かつ面白い配合の8頭の親系統が8種類（現在' + th.superPerfect.distinctCount + '種類）の場合に当てはまるように見えます（参考）。</li>';
   }
   if (th.miracle.hit) {
-    html += '<li>奇跡の配合：当てはまるように見えます（参考） — 完璧な配合が成立し、さらに4×3のクロスがあります。「' + esc(th.miracle.cross.name) + '」が種牡馬側4代前（' + esc(th.miracle.cross.sireLabel) + '）と繁殖牝馬側3代前（' + esc(th.miracle.cross.damLabel) + '）にいます。名前の一致だけで判定しているため、兄弟クロス（異なる馬同士の全兄弟）は分からず、判定の限界です。牝馬クロスが4代前でも無効という出典もありますが、祖先の性別データがないため判定できません。配合掲示板には表示されない隠し要素とされます。因子別の効果数値は表示しません。</li>';
+    var variantNote = (th.miracle.cross.sireName && th.miracle.cross.damName && th.miracle.cross.sireName !== th.miracle.cross.damName)
+      ? '（父側の表記「' + esc(th.miracle.cross.sireName) + '」と母側の表記「' + esc(th.miracle.cross.damName) + '」は、同馬の因名違い・年号違いとみなして照合しています。参考）' : '';
+    html += '<li>奇跡の配合：当てはまるように見えます（参考） — 完璧な配合が成立し、さらに4×3のクロスがあります。「' + esc(th.miracle.cross.name) + '」が種牡馬側4代前（' + esc(th.miracle.cross.sireLabel) + '）と繁殖牝馬側3代前（' + esc(th.miracle.cross.damLabel) + '）にいます。' + variantNote + '名前の一致だけで判定しているため、兄弟クロス（異なる馬同士の全兄弟）は分からず、判定の限界です。牝馬クロスが4代前でも無効という出典もありますが、祖先の性別データがないため判定できません。配合掲示板には表示されない隠し要素とされます。因子別の効果数値は表示しません。</li>';
   } else if (!th.perfect.hit) {
     html += '<li>奇跡の配合：当てはまりません — 完璧な配合の成立が前提のため、まず完璧な配合の条件を確認してください（参考）。</li>';
   } else {
@@ -1907,17 +1937,32 @@ function buildChildPedigreeHtml(sire, dam) {
   var rows = buildChildPedigree(sire, dam);
   if (!rows) return '';
   var nameToIdx = stallionNameToIndex();
+  /* 素名→DB番号の対応（祖先名が素名で、DBの記録名が別バリエーションの
+     場合の照合用。例：祖先名ダンチヒ → DBのダンチヒ1992）。 */
+  var baseToIdx = {};
+  if (STALLIONS && Array.isArray(STALLIONS.horses)) {
+    STALLIONS.horses.forEach(function (h, j) {
+      var b = normalizeCrossName(h.n);
+      if (b && baseToIdx[b] === undefined) baseToIdx[b] = j;
+    });
+  }
   var html = '<details class="ref-details"><summary>子の血統・配合理論を見る（参考・未検証）</summary>';
   html += '<p>子の父：' + esc(sire.n || '') + ' ／ 子の母：' + esc(dam.n || '') + '</p>';
   html += '<h4>子の血統表（5代・参考）</h4><table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>因子</th><th>DB</th></tr></thead><tbody>';
   rows.forEach(function (r) {
     var idx = (r.name && nameToIdx[r.name] !== undefined) ? nameToIdx[r.name] : null;
+    if (idx === null && r.name) {
+      /* 祖先名が素名（例：ダンチヒ）で、DBの記録名が別バリエーション
+         （例：ダンチヒ1992）の場合も、正規化して探す。 */
+      var b = normalizeCrossName(r.name);
+      if (b && baseToIdx[b] !== undefined) idx = baseToIdx[b];
+    }
     html += '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.name || '—') + '</td><td>' + esc(r.pa || '—') + '</td><td>' +
       esc([r.f1, r.f2].filter(function (x) { return x; }).join('／') || '—') + '</td><td>' +
       (idx !== null ? 'DBにあり <button type="button" data-stallion-idx="' + idx + '">詳細</button>' : '—') + '</td></tr>';
   });
   html += '</tbody></table>';
-  html += '<p class="note">祖先名がデータベース内の馬名と完全一致する場合は「DBにあり」と表示し、「詳細」でその馬の血統・詳細を見られます。</p>';
+  html += '<p class="note">祖先名がデータベース内の馬名と完全一致する場合は「DBにあり」と表示し、「詳細」でその馬の血統・詳細を見られます。同馬の因名違い・年号違いの表記（例：ダンチヒ／ダンチヒ1992）も同一視して探します。</p>';
   var th = checkMatingTheories(sire, dam);
   html += '<h4>配合理論の確認（参考・未検証）</h4>';
   html += matingTheorySummaryHtml(th);
@@ -1931,7 +1976,8 @@ function buildChildPedigreeHtml(sire, dam) {
         return '父方' + pr.sireGen + '代（' + pr.sireLabel + '） × 母方' + pr.damGen + '代（' + pr.damLabel + '）';
       }).join('／');
       var factors = [c.f1, c.f2].filter(function (x) { return x; }).join('／');
-      return '<li>' + esc(c.name) + '：' + esc(pairs) + (factors ? '（因子：' + esc(factors) + '）' : '') + '</li>';
+      var forms = (c.forms && c.forms.length > 1) ? '（表記：' + esc(c.forms.join('／')) + ' — 同馬の因名違い・年号違いとみなしています）' : '';
+      return '<li>' + esc(c.name) + forms + '：' + esc(pairs) + (factors ? '（因子：' + esc(factors) + '）' : '') + '</li>';
     }).join('') + '</ul>';
   }
   html += '<p class="note">出典（ユーザー攻略記事。公式仕様ではありません）：<a href="https://games.app-liv.jp/archives/232008" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」</a>、<a href="https://games.app-liv.jp/archives/198428" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のポイント」</a>、<a href="https://dbms-go.net/配合解説/完璧な配合/" target="_blank" rel="noopener">dbms-go.net「完璧な配合」</a>、<a href="https://dabimasu.gamerch.com/%E5%AE%8C%E7%92%A7%E3%81%AA%E9%85%8D%E5%90%88" target="_blank" rel="noopener">Gamerch「完璧な配合」</a>、<a href="https://note.com/runbarunba1218/n/n1952a2d129aa" target="_blank" rel="noopener">るんば note「超完璧・奇跡の配合」</a>、<a href="https://note.com/huh_ds/n/n0eb8a439d3f3" target="_blank" rel="noopener">ふふ牧場 note「ダビマス 備忘録」</a>、<a href="https://note.com/sashimi_sky/n/n65db77ba6661" target="_blank" rel="noopener">しまむら牧場 note「奇跡の配合」</a>、<a href="https://note.com/derbymas/n/n4352f6b2c96f" target="_blank" rel="noopener">スマイル牧場 note「奇跡の配合」</a>、<a href="https://note.com/dabimas_ikko/n/ndf3449c98068" target="_blank" rel="noopener">イッコ牧場 note「危険な配合」</a>。詳しくは docs/rules.md を見てください。</p>';

@@ -360,6 +360,75 @@ function treeMatings(m, out) {
   } catch (e) { importOk = false; }
   check('M16', '由来のない旧形式の自分の馬を含むJSONも読める（後方互換）', importOk);
 
+  // --- M17: 最終配合は奇跡の配合（ダンチヒの表記違いのクロス） ---
+  // 画像の最終配合は「奇跡の配合」。ツールは以前「完璧な配合」と判定していた。
+  // 原因：4×3クロスはダンチヒで、父側は「ダンチヒ」（父父母父・4代前）、
+  // 母側は「ダンチヒ1992」（母母父・3代前）と表記が違い、完全一致では
+  // 拾えなかった。同馬の因名違い・年号違い（しまむら牧場 note：ダンチヒ
+  // 瞬走はダンチヒ1992／ダンチヒ覇閃でも代用可。るんば note：同一馬の
+  // 因名違いによる全兄弟クロスは奇跡の配合が成立）として正規化して照合
+  // するよう修正した。位置の解釈は変えていない（母側3代前は母母父のみ）。
+  const finalGen = genOf(planE, 0);
+  const finalSire = C.ownHorses.find((h) => h.id === finalGen.sireOwnId);
+  const finalDam = C.ownHorses.find((h) => h.id === finalGen.damOwnId);
+  const finalTh = C.checkMatingTheories(finalSire, finalDam);
+  const finalRows = C.buildChildPedigree(finalSire, finalDam);
+  check('M17', '最終配合（A3×D1）は奇跡の配合になる。クロスはダンチヒ：父側「ダンチヒ」（父父母父・4代前）×母側「ダンチヒ1992」（母母父・3代前）。完璧な配合の前提も成立',
+    finalTh.miracle.hit === true && finalTh.perfect.hit === true &&
+    finalTh.miracle.cross.name === 'ダンチヒ' &&
+    finalTh.miracle.cross.sireLabel === '父父母父' && finalTh.miracle.cross.damLabel === '母母父' &&
+    finalTh.miracle.cross.sireName === 'ダンチヒ' && finalTh.miracle.cross.damName === 'ダンチヒ1992' &&
+    finalRows[4].name === 'ダンチヒ' && finalRows[12].name === 'ダンチヒ1992',
+    'miracle=' + finalTh.miracle.hit + ' cross=' + JSON.stringify(finalTh.miracle.cross));
+
+  // --- M18: 名前の正規化（因名・年号の違いを吸収） ---
+  check('M18', 'normalizeCrossName は因名・年号の違いを吸収する（ダンチヒ1992／ダンチヒ-瞬走-／ダンチヒ-覇閃- → ダンチヒ。トウショウボーイ1977 → トウショウボーイ。素名はそのまま）',
+    C.normalizeCrossName('ダンチヒ1992') === 'ダンチヒ' &&
+    C.normalizeCrossName('ダンチヒ-瞬走-') === 'ダンチヒ' &&
+    C.normalizeCrossName('ダンチヒ-覇閃-') === 'ダンチヒ' &&
+    C.normalizeCrossName('トウショウボーイ1977') === 'トウショウボーイ' &&
+    C.normalizeCrossName('ダンチヒ') === 'ダンチヒ' &&
+    C.normalizeCrossName('グラスワンダー1999') === 'グラスワンダー');
+
+  // --- M19: 10件すべての判定が画像のラベルと一致する ---
+  // 画像のラベル：B1面白い、B2よくできた、B3面白い、C2面白い、BC奇跡、
+  // A2面白い、A3面白い、最終奇跡。A1・C1はラベルなし（理論なし）。
+  function thOf(p, gi) {
+    const g = genOf(p, gi);
+    const s = g.sireOwnId ? C.ownHorses.find((h) => h.id === g.sireOwnId) : C.STALLIONS.horses[g.sireDbIndex];
+    const d = g.damOwnId ? C.ownHorses.find((h) => h.id === g.damOwnId) : C.STALLIONS.horses[g.damDbIndex];
+    return C.checkMatingTheories(s, d);
+  }
+  function topLabel(th) {
+    if (th.miracle.hit) return '奇跡の配合';
+    if (th.superPerfect.hit) return '超完璧な配合';
+    if (th.perfect.hit) return '完璧な配合';
+    if (th.migoto.hit) return '見事な配合';
+    if (th.omoshiroi.hit) return '面白い配合';
+    if (th.yokudekita.hit) return 'よくできた配合';
+    return 'なし';
+  }
+  const labels = {
+    A1: topLabel(thOf(planA, 0)), A2: topLabel(thOf(planA, 1)), A3: topLabel(thOf(planA, 2)),
+    B1: topLabel(thOf(planB, 0)), B2: topLabel(thOf(planB, 1)), B3: topLabel(thOf(planB, 2)),
+    C1: topLabel(thOf(planC, 0)), C2: topLabel(thOf(planC, 1)),
+    BC: topLabel(thOf(planD, 0)), FINAL: topLabel(thOf(planE, 0)),
+  };
+  check('M19', '画像の配合10件すべての判定ラベルが画像と一致する（A1なし・A2面白い・A3面白い・B1面白い・B2よくできた・B3面白い・C1なし・C2面白い・BC奇跡・最終奇跡）',
+    labels.A1 === 'なし' && labels.A2 === '面白い配合' && labels.A3 === '面白い配合' &&
+    labels.B1 === '面白い配合' && labels.B2 === 'よくできた配合' && labels.B3 === '面白い配合' &&
+    labels.C1 === 'なし' && labels.C2 === '面白い配合' &&
+    labels.BC === '奇跡の配合' && labels.FINAL === '奇跡の配合',
+    JSON.stringify(labels));
+
+  // --- M20: インブリード表示でも表記違いが同一視される ---
+  const finalCrosses = C.findInbreeding(finalSire, finalDam);
+  const danchi = finalCrosses.find((c) => c.name === 'ダンチヒ');
+  check('M20', '最終配合のインブリードにダンチヒが出る（父父母父4代×母母父3代、表記は「ダンチヒ／ダンチヒ1992」）',
+    !!danchi && danchi.pairs.some((pr) => pr.sireLabel === '父父母父' && pr.sireGen === 4 && pr.damLabel === '母母父' && pr.damGen === 3) &&
+    Array.isArray(danchi.forms) && danchi.forms.indexOf('ダンチヒ') >= 0 && danchi.forms.indexOf('ダンチヒ1992') >= 0,
+    JSON.stringify(danchi));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('HARNESS ERROR', e); process.exit(2); });
