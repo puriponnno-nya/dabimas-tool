@@ -70,6 +70,21 @@
       "c": "fut",
       "out": "海外も視野に入れるとの評価",
       "src": "将来は海外も視野に入れたほうが良いでしょう"
+    },
+    {
+      "c": "tal",
+      "out": "計り知れない素質",
+      "src": "計り知れない素質を感じます"
+    },
+    {
+      "c": "tal",
+      "out": "馬神コメントあり",
+      "src": "この御方は馬神様の化身かもしれません\n拝んでもいいですか？"
+    },
+    {
+      "c": "tal",
+      "out": "後光コメントあり",
+      "src": "常識では測れないような馬ですね\nん……！？一瞬後光が射したような……"
     }
   ],
   "cmx": [],
@@ -99,5 +114,5 @@
   "measure_note": "測定用コメントは検出のみ。数値・到達率は判定しない。「BC登録はまだ先ですね」と「BC登録は　まだ先ですね」はスペースの有無で区別する（正規化で空白を除去する前に判定する）。文字起こしでスペースが落ちると区別できない。メモリ1とメモリ2などでは同じコメントでも到達率の読み方が違う。詳しくは docs/rules.md。",
   "note": "全件網羅ではない。代表的なコメントのみを統合した。貼り付け文は Google アプリ等の文字起こしを前提とするため、完全一致ではなく正規化＋部分一致・あいまい照合で分類する。照合できなかった文は「未分類」とする。",
   "source": "puriponyan/dabimas-tool-preview の horse-app-prototype-backup-v2.html 内の CMT/CMX、および horse-speed-comment-v1.js、horse-stamina-comment-v1.js、horse-oka-comment-v1.js、horse-race-comment-v1.js、horse-overseas-comment-v1.js、horse-measure-comments-v1.js",
-  "version": 2
+  "version": 3
 }
