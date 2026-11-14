@@ -318,8 +318,8 @@ function collectHtml(el) {
   const planHtml = planLis.length ? collectHtml(planLis[0]) : '';
   check('N20', '計画の表示は第1世代→第2世代の順で、「次の世代を追加」「第2世代を削除」が出て、子の使い道も表示される',
     planLis.length === 1 &&
-    planHtml.indexOf('第1世代') >= 0 && planHtml.indexOf('第2世代') >= 0 &&
-    planHtml.indexOf('第1世代') < planHtml.indexOf('第2世代') &&
+    planHtml.indexOf('<h3>第1世代</h3>') >= 0 && planHtml.indexOf('<h3>第2世代</h3>') >= 0 &&
+    planHtml.indexOf('<h3>第1世代</h3>') < planHtml.indexOf('<h3>第2世代</h3>') &&
     hasButtonText(planLis[0], '次の世代を追加') &&
     hasButtonText(planLis[0], '第2世代を削除') &&
     htmlContains(planLis[0], '第2世代の父として使われています') &&
@@ -332,7 +332,7 @@ function collectHtml(el) {
     brokenLis.length === 1 && htmlContains(brokenLis[0], '見つかりません') &&
     htmlContains(brokenLis[0], '中間削除テスト') &&
     !htmlContains(brokenLis[0], '第3世代の血統') &&
-    collectHtml(brokenLis[0]).indexOf('第1世代') < collectHtml(brokenLis[0]).indexOf('第2世代'));
+    collectHtml(brokenLis[0]).indexOf('<h3>第1世代</h3>') < collectHtml(brokenLis[0]).indexOf('<h3>第2世代</h3>'));
   const htmlReal = C.buildChildPedigreeHtml(sire0, dam3);
   check('N22', '配合理論は面白い／見事な／よくできたに加え、完璧／超完璧／奇跡／危険も表示される',
     htmlReal.includes('面白い配合') && htmlReal.includes('見事な配合') &&

@@ -129,6 +129,42 @@ footer { margin-top: 26px; }
 /* 計画の子を次の配合の親として登録する欄 */
 .child-register { border: 1px dashed #4a63b8; border-radius: 16px; padding: 8px 12px; margin: 8px 0; }
 .child-register input, .child-register select { margin: 4px 8px 4px 0; }
+/* 配合ルート図（ステップ7）：世代の列から作る図解。
+   左が最終の子、右へ行くほど前の世代。種牡馬は青系、繁殖牝馬はピンク系。
+   横にスクロールできる（iPhone縦画面でもはみ出さない）。図と今までの一覧表示は
+   両方残し、図は折りたたみ（既定は開く）で切り替えられる。 */
+.route-diagram {
+  border: 1px solid #2c3f7d; border-radius: 20px; padding: 10px 14px;
+  margin: 12px 0; background: #0e1330;
+}
+.route-diagram summary {
+  cursor: pointer; font-size: 14px; font-weight: bold; color: #ffd34d;
+  min-height: 44px; display: flex; align-items: center;
+}
+.route-diagram[open ] summary { margin-bottom: 8px; }
+.route-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+.route-diagram-inner { display: flex; gap: 8px; align-items: stretch; min-width: max-content; }
+.route-col {
+  min-width: 150px; max-width: 190px; flex: 0 0 auto;
+  border: 1px solid #2c3f7d; border-radius: 16px; padding: 10px;
+  background: #121830; display: flex; flex-direction: column; gap: 8px;
+}
+.route-col h4 { margin: 0; font-size: 14px; color: #ffd34d; text-align: center; }
+.route-arrow { align-self: center; flex: 0 0 auto; font-size: 22px; color: #ff8f8f; }
+.route-box { border-radius: 14px; padding: 10px 8px; text-align: center; }
+.route-box .route-role, .route-box .route-name, .route-box .route-note { display: block; }
+.route-box .route-role { font-size: 12px; }
+.route-box .route-name { font-weight: bold; font-size: 15px; }
+.route-box .route-note { font-size: 12px; margin-top: 4px; }
+.route-sire { background: #173a7a; border: 1px solid #4d7cfe; color: #dbe8ff; }
+.route-dam { background: #5e1f3d; border: 1px solid #ff8fb0; color: #ffe3ec; }
+.route-child { background: #332a05; border: 1px solid #ffd34d; color: #ffe9a8; }
+.route-missing { background: transparent; border: 1px dashed #8a7414; color: #aab8dd; }
+.route-theory {
+  font-size: 13px; text-align: center; background: #18224a; color: #d6e6ff;
+  border-radius: 12px; padding: 6px 8px; margin: 0;
+}
+.route-theory-missing { background: #1a1a2e; color: #aab8dd; }
 /* 1つの計画での多世代の配合（ステップ5）：世代ごとの枠 */
 .generation {
   border: 1px solid #2c3f7d; border-radius: 20px; padding: 12px 14px;

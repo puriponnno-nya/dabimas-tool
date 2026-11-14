@@ -1772,6 +1772,130 @@ function buildChildPedigreeHtml(sire, dam) {
   html += '</details>';
   return html;
 }
+/* ---------- 配合ルート図（ステップ7） ---------- */
+/* 計画の世代の列から、世代ごとの父・母・子を図にする。左が最終の子、
+   右へ行くほど前の世代（第n世代＝1代前、第n-1世代＝2代前…）。
+   種牡馬は青系、繁殖牝馬はピンク系の箱。親から子へのつながりを
+   矢印（←）で示す。各世代の配合理論は、ステップ3・6の判定
+   （checkMatingTheories）から一番上のものをラベルにする。
+   優先順：奇跡＞超完璧＞完璧＞見事＞面白い＞よくできた。
+   どれにも当てはまらなければ「配合理論なし」。
+   すべて参考・未検証で、配合の効果を断定しない。
+   buildRouteDiagram は表示用の純粋なデータ（DOMを使わない）で、
+   scripts/test-route-diagram.js で自動確認する。 */
+function routeTheoryLabel(sire, dam) {
+  var th = checkMatingTheories(sire, dam);
+  if (!th) return null;
+  var hits = [];
+  if (th.miracle.hit) hits.push('奇跡の配合');
+  if (th.superPerfect.hit) hits.push('超完璧な配合');
+  if (th.perfect.hit) hits.push('完璧な配合');
+  if (th.migoto.hit) hits.push('見事な配合');
+  if (th.omoshiroi.hit) hits.push('面白い配合');
+  if (th.yokudekita.hit) hits.push('よくできた配合');
+  return { label: hits.length ? hits[0] : '配合理論なし', hits: hits, dangerous: th.dangerous.hit, anyHit: th.anyHit };
+}
+/* 世代の父馬・母馬1頭分の図の箱。
+   kind: 'sire'／'dam'（解決できた親）、'missing'（選んだ親が見つからない）、
+   'name-only'（名前だけの入力）、'empty'（未入力）。
+   prevChildGenNo は「自家生産馬ID→その子が何世代目か」の対応表。
+   前の世代の子が親になっている場合は、その旨を注記する。 */
+function routeParentBox(gen, role, prevChildGenNo) {
+  var isSire = role === 'sire';
+  var name = String((isSire ? gen.sireName : gen.damName) || '').trim();
+  var ownId = isSire ? gen.sireOwnId : gen.damOwnId;
+  var dbIndex = isSire ? gen.sireDbIndex : gen.damDbIndex;
+  var hasRef = (dbIndex !== null && dbIndex !== undefined) || !!ownId;
+  var resolved = resolveParentRef({ dbIndex: dbIndex, ownId: ownId });
+  if (resolved) {
+    var note = ownId ? '自家生産馬' : 'DB';
+    if (ownId) {
+      var o = findOwnHorse(ownId);
+      if (o && o.generation) note += '・' + o.generation + '代目';
+    }
+    if (ownId && prevChildGenNo && prevChildGenNo[ownId]) note += '・第' + prevChildGenNo[ownId] + '世代の子';
+    return { role: role, kind: role, name: resolved.n || name, note: note };
+  }
+  if (hasRef) {
+    return { role: role, kind: 'missing', name: '親が見つかりません',
+      note: '選んだ' + (isSire ? '父馬' : '母馬') + 'が見つかりません（DBが読み込めていないか、自家生産馬が削除された可能性があります）' };
+  }
+  if (name) {
+    return { role: role, kind: 'name-only', name: name,
+      note: '名前だけの入力（DB・自家生産馬から未選択）のため血統・配合理論は確認できません' };
+  }
+  return { role: role, kind: 'empty', name: '（未入力）', note: '' };
+}
+function buildRouteDiagram(plan) {
+  var gens = planGenerations(plan);
+  if (!gens.length) return null;
+  var n = gens.length;
+  var prevChildGenNo = {};
+  gens.forEach(function (g, i) { if (g.childOwnId) prevChildGenNo[g.childOwnId] = i + 1; });
+  var matings = gens.map(function (gen, i) {
+    var m = { genNo: i + 1, status: 'ok', label: null, hits: [], dangerous: false, anyHit: false };
+    var pair = resolveGenerationParents(gen);
+    if (pair) {
+      var t = routeTheoryLabel(pair.sire, pair.dam);
+      m.label = t.label; m.hits = t.hits; m.dangerous = t.dangerous; m.anyHit = t.anyHit;
+    } else if (generationHasAnyParentRef(gen)) {
+      m.status = 'missing';
+    } else {
+      m.status = 'no-ref';
+    }
+    return m;
+  });
+  var columns = [];
+  var finalGen = gens[n - 1];
+  columns.push({
+    key: 'final', title: '最終の子', genNo: n, mating: null,
+    boxes: [{ role: 'child', kind: 'child',
+      name: String(finalGen.childName || '').trim() || defaultGenerationChildName(plan, n),
+      note: '第' + n + '世代の子・' + (finalGen.childSex || '不明') }]
+  });
+  for (var k = n - 1; k >= 0; k--) {
+    var gen = gens[k];
+    columns.push({
+      key: 'gen-' + (k + 1), title: '第' + (k + 1) + '世代（' + (n - k) + '代前）',
+      genNo: k + 1, mating: matings[k],
+      boxes: [routeParentBox(gen, 'sire', prevChildGenNo), routeParentBox(gen, 'dam', prevChildGenNo)]
+    });
+  }
+  return { planName: plan.name, generationCount: n,
+    finalChildName: String(finalGen.childName || '').trim() || defaultGenerationChildName(plan, n),
+    columns: columns, matings: matings };
+}
+function buildRouteDiagramHtml(plan) {
+  var d = buildRouteDiagram(plan);
+  if (!d) return '';
+  var html = '<details class="route-diagram" open><summary>配合ルート図を見る（参考・未検証）</summary>';
+  html += '<p class="note">左が最終の子、右へ行くほど前の世代です。青い箱が種牡馬、ピンクの箱が繁殖牝馬です。矢印（←）は親から子へのつながりです。配合理論の判定はユーザー攻略記事による推定・共有情報で、すべて参考・未検証です。配合の効果を断定する表示はしません。</p>';
+  html += '<div class="route-scroll"><div class="route-diagram-inner">';
+  d.columns.forEach(function (col, ci) {
+    if (ci > 0) html += '<div class="route-arrow" aria-hidden="true">←</div>';
+    html += '<div class="route-col"><h4>' + esc(col.title) + '</h4>';
+    col.boxes.forEach(function (b) {
+      var cls = b.kind === 'sire' ? 'route-sire' : b.kind === 'dam' ? 'route-dam' : b.kind === 'child' ? 'route-child' : 'route-missing';
+      var roleText = b.role === 'sire' ? '父（種牡馬）' : b.role === 'dam' ? '母（繁殖牝馬）' : '子';
+      html += '<div class="route-box ' + cls + '"><span class="route-role">' + roleText + '</span><span class="route-name">' + esc(b.name || '—') + '</span>' +
+        (b.note ? '<span class="route-note">' + esc(b.note) + '</span>' : '') + '</div>';
+    });
+    if (col.mating) {
+      var m = col.mating;
+      if (m.status === 'ok') {
+        html += '<p class="route-theory">第' + m.genNo + '世代：' + esc(m.label) + '（参考・未検証）' +
+          (m.dangerous ? '／危険な配合の条件に当てはまるように見えます（参考）' : '') + '</p>';
+      } else if (m.status === 'missing') {
+        html += '<p class="route-theory route-theory-missing">第' + m.genNo + '世代：親が見つかりません — この世代の配合理論は確認できません（計画自体は残っています）</p>';
+      } else {
+        html += '<p class="route-theory route-theory-missing">第' + m.genNo + '世代：父・母をDBまたは自家生産馬から選ぶと配合理論を確認できます</p>';
+      }
+    }
+    html += '</div>';
+  });
+  html += '</div></div></details>';
+  return html;
+}
 function loadIntoForm(r) {
 $('edit-id').value = r.id;
 $('f-name').value = r.name;
@@ -1992,6 +2116,11 @@ var li = document.createElement('li');
 li.innerHTML = '<p class="name">' + esc(p.name) + '</p>'
 + '<p class="meta">' + 'ステータス ' + esc(p.status)
 + (p.memo? '\nメモ：' + esc(p.memo): '') + '</p>';
+/* 配合ルート図（ステップ7）：世代の列から作る図解。世代の一覧表示とは別に、
+   計画カードの上部に出す。折りたたみで、既定は開く。 */
+var routeDiv = document.createElement('div');
+routeDiv.innerHTML = buildRouteDiagramHtml(p);
+li.appendChild(routeDiv);
 var gens = planGenerations(p);
 gens.forEach(function (gen, gi) {
 var genNo = gi + 1;
