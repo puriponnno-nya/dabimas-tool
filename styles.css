@@ -61,13 +61,13 @@ button[type="submit"] {
 }
 button.danger { color: #ffb3c0; border-color: #8a2f45; background: #2a1220; }
 ul { list-style: none; padding: 0; margin: 0; }
-#horse-list li {
+#horse-list li, #plan-list li {
   border: 1px solid #2c3f7d; border-radius: 20px; padding: 14px;
   margin: 0 0 12px; background: #121830;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
-#horse-list .name { font-weight: bold; font-size: 18px; color: #cfe0ff; }
-#horse-list .meta { font-size: 14px; color: #aab8dd; white-space: pre-line; }
+#horse-list .name, #plan-list .name { font-weight: bold; font-size: 18px; color: #cfe0ff; }
+#horse-list .meta, #plan-list .meta { font-size: 14px; color: #aab8dd; white-space: pre-line; }
 #result {
   border: 1px solid #2c3f7d; border-radius: 20px; padding: 14px;
   background: #121830;

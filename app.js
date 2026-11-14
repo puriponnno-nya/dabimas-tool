@@ -5,7 +5,10 @@
 正規化＋部分一致・あいまい照合で分類する。照合できない文は「未分類」。
 スクショOCRはしない（Perplexityではファイルのアップロード上限で無理だった）。 */
 var LS_KEY = 'dabimas-ability-v1';
+var LS_PLANS_KEY = 'dabimas-breeding-v1';
 var DATA_VERSION = 1;
+/* 繁殖計画のステータス（旧ツール spec v1.0 と同じ3つ）。 */
+var PLAN_STATUSES = ['計画', '予約', '実行済み'];
 
 /* data/*.json と同じ内容の内蔵コピー（file:// で開いたとき用）。正本は data/*.json。 */
 var FALLBACK_COMMENTS = {"categories":{"exp":"期待と条件","fea":"特徴","fut":"将来評価","tal":"素質評価"},"cmt":[{"c":"tal","out":"凄い素質","src":"これは凄い素質の馬ですね"},{"c":"fut","out":"いくつかのタイトルを狙える","src":"将来はいくつかのタイトルも狙えるでしょうね"},{"c":"fea","out":"スピードが付きそう","src":"スピードが付きそうな馬体ですね"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ上手くいけば三冠もあると思います"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ巧くいけば三冠もあると思います"},{"c":"fut","out":"どこに出しても恥ずかしくないとの評価","src":"これならどこに出しても恥ずかしくないでしょう"},{"c":"exp","out":"しっかり育てて活躍を期待","src":"しっかり育てて活躍してもらいましょう"},{"c":"fut","out":"期待できる","src":"期待できます"},{"c":"fea","out":"スピードが付きそうな馬体／短距離適正あり／牛嶋厩舎を推奨","src":"スピードが付きそうな馬体ですね\n短距離適正もありそうですし\n牛嶋厩舎を推奨します"},{"c":"fea","out":"強い心肺機能／八木沼厩舎でスタミナ強化","src":"強い心肺機能を備えてますね長距離馬の育成が得意な八木沼厩舎でスタミナ強化が良いでしょう"},{"c":"exp","out":"桜花賞を目標にする提案","src":"まずは桜花賞を目指しましょう"},{"c":"exp","out":"活躍時期も早そう／朝日杯フューチュリティステークスを目標に仕上げる提案","src":"活躍時期も早そうですし朝日杯フューチュリティステークスを目標に仕上げてみてはいかがでしょうか"},{"c":"fut","out":"海外も視野に入れるとの評価","src":"将来は海外も視野に入れたほうが良いでしょう"}],"cmx":[],"measure":[{"kind":"BC登録はまだ先（スペースなし）","pattern":"BC登録はまだ先ですね","spaceSensitive":true},{"kind":"BC登録は　まだ先（スペースあり）","pattern":"BC登録は　まだ先ですね","spaceSensitive":true},{"kind":"完成まであと一息","pattern":"完成まであと一息でしょうか"},{"kind":"準備はできた","pattern":"準備はできたようですね"}]};
@@ -427,9 +430,45 @@ localStorage.setItem(LS_KEY, JSON.stringify({ version: DATA_VERSION, records: re
 }
 function newId() { return 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);}
 
+/* ---------- 繁殖計画（ステップ1：記録だけ） ---------- */
+/* 計画は馬データとは別のキーで保存し、馬データに影響しない。
+   父馬・母馬は今回は名前のテキスト入力のみ。登録馬からの選択や
+   攻略データベースからの選択は後のステップ。将来の紐付けのため、
+   sireHorseId / damHorseId の欄をデータ構造に用意しておくが、
+   今は常に null（未紐付け）。配合のシミュレーションはしない。
+   未確定の配合効果を断定表示しない。 */
+function loadPlans() {
+try {
+var raw = localStorage.getItem(LS_PLANS_KEY);
+if (!raw) return [];
+var data = JSON.parse(raw);
+if (!data || data.version!== DATA_VERSION ||!Array.isArray(data.plans)) return [];
+return data.plans.filter(function (p) { return validPlan(p);});
+} catch (e) { return [];}
+}
+function savePlans(plans) {
+localStorage.setItem(LS_PLANS_KEY, JSON.stringify({ version: DATA_VERSION, plans: plans}));
+}
+function newPlanId() { return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);}
+function validPlan(p) {
+if (!p || typeof p!== 'object') return false;
+if (typeof p.id!== 'string' ||!p.id) return false;
+if (typeof p.name!== 'string' ||!p.name.trim()) return false;
+if (PLAN_STATUSES.indexOf(p.status) < 0) return false;
+var optText = ['sireName', 'damName', 'memo'];
+for (var j = 0; j < optText.length; j++) {
+if (p[optText[j]] !== undefined && typeof p[optText[j]]!== 'string') return false;
+}
+/* 将来の紐付け用。未紐付けは null。文字列なら登録馬のIDを指す想定。 */
+if (p.sireHorseId !== undefined && p.sireHorseId !== null && typeof p.sireHorseId!== 'string') return false;
+if (p.damHorseId !== undefined && p.damHorseId !== null && typeof p.damHorseId!== 'string') return false;
+return true;
+}
+
 /* ---------- 画面 ---------- */
 var $ = function (id) { return document.getElementById(id);};
 var records = loadAll();
+var plans = loadPlans();
 var pendingManual = []; /* 今の入力に対する未分類の手修正 */
 var pendingMeasureLog = []; /* 今の入力に対する測定メモ（絞り込み用） */
 
@@ -703,6 +742,29 @@ $(id).addEventListener('change', function () { renderResult(currentFormRecord())
 $('paste-btn').addEventListener('click', fillFormFromPaste);
 $('ml-add').addEventListener('click', addMeasureLogEntry);
 
+/* 繁殖計画の登録・編集（ステップ1）。父馬・母馬は名前のテキスト入力のみ。 */
+$('plan-form').addEventListener('submit', function (e) {
+e.preventDefault();
+var plan = currentPlanForm();
+if (!plan.name) { $('plan-form-error').textContent = '計画名を入力してください'; return;}
+if (PLAN_STATUSES.indexOf(plan.status) < 0) { $('plan-form-error').textContent = 'ステータスが不正です'; return;}
+$('plan-form-error').textContent = '';
+var now = new Date().toISOString();
+if (plan.id) {
+var i = plans.findIndex(function (x) { return x.id === plan.id;});
+if (i < 0) { $('plan-form-error').textContent = '編集中の計画が見つかりません'; return;}
+plan.createdAt = plans[i].createdAt; plan.updatedAt = now;
+plans[i] = plan;
+} else {
+plan.id = newPlanId(); plan.createdAt = now; plan.updatedAt = now;
+plans.push(plan);
+}
+savePlans(plans);
+renderPlans();
+resetPlanForm();
+});
+$('plan-cancel-edit').addEventListener('click', resetPlanForm);
+
 /* メモリ欄に 1〜6 を手で入れたときも成長タイプに反映する */
 $('f-memory').addEventListener('input', function () {
   var mn = parseInt($('f-memory').value, 10);
@@ -710,6 +772,65 @@ $('f-memory').addEventListener('input', function () {
   updateGrowthBar();
 });
 $('f-growth').addEventListener('change', updateGrowthBar);
+
+/* ---------- 繁殖計画の画面 ---------- */
+function currentPlanForm() {
+return {
+id: $('plan-edit-id').value || '',
+name: $('p-name').value.trim(),
+sireName: $('p-sire').value.trim(),
+damName: $('p-dam').value.trim(),
+sireHorseId: null,
+damHorseId: null,
+status: $('p-status').value,
+memo: $('p-memo').value.trim()
+};
+}
+function loadPlanIntoForm(p) {
+$('plan-edit-id').value = p.id;
+$('p-name').value = p.name;
+$('p-sire').value = p.sireName || '';
+$('p-dam').value = p.damName || '';
+$('p-status').value = p.status;
+$('p-memo').value = p.memo || '';
+$('plan-save-btn').textContent = '計画を更新';
+$('plan-cancel-edit').hidden = false;
+$('plan-form-error').textContent = '';
+window.scrollTo(0, 0);
+}
+function resetPlanForm() {
+$('plan-edit-id').value = '';
+$('plan-form').reset();
+$('plan-save-btn').textContent = '計画を登録';
+$('plan-cancel-edit').hidden = true;
+$('plan-form-error').textContent = '';
+}
+function renderPlans() {
+$('plan-count').textContent = String(plans.length);
+$('plan-empty-note').style.display = plans.length? 'none': 'block';
+var ul = $('plan-list');
+ul.innerHTML = '';
+plans.forEach(function (p) {
+var li = document.createElement('li');
+li.innerHTML = '<p class="name">' + esc(p.name) + '</p>'
++ '<p class="meta">' + '父 ' + esc(p.sireName || '—') + ' × 母 ' + esc(p.damName || '—')
++ '\nステータス ' + esc(p.status)
++ (p.memo? '\nメモ：' + esc(p.memo): '') + '</p>'
++ '<p class="note">配合のシミュレーションはまだありません。記録だけです。</p>';
+var editBtn = document.createElement('button');
+editBtn.type = 'button'; editBtn.textContent = '編集する';
+editBtn.addEventListener('click', function () { loadPlanIntoForm(p);});
+var delBtn = document.createElement('button');
+delBtn.type = 'button'; delBtn.textContent = '削除する'; delBtn.className = 'danger';
+delBtn.addEventListener('click', function () {
+if (!window.confirm('繁殖計画「' + p.name + '」を削除しますか？')) return;
+plans = plans.filter(function (x) { return x.id!== p.id;});
+savePlans(plans); renderPlans();
+});
+li.appendChild(editBtn); li.appendChild(delBtn);
+ul.appendChild(li);
+});
+}
 
 /* ---------- JSON 書き出し・読み込み（全件置き換え・検証あり） ---------- */
 function validRecord(r) {
@@ -754,13 +875,13 @@ if (typeof r.manual[i].src!== 'string' || ['tal', 'fut', 'fea', 'exp'].indexOf(r
 return true;
 }
 $('export-btn').addEventListener('click', function () {
-var blob = new Blob([JSON.stringify({ version: DATA_VERSION, exportedAt: new Date().toISOString(), records: records}, null, 2)], { type: 'application/json'});
+var blob = new Blob([JSON.stringify({ version: DATA_VERSION, exportedAt: new Date().toISOString(), records: records, plans: plans}, null, 2)], { type: 'application/json'});
 var a = document.createElement('a');
 a.href = URL.createObjectURL(blob);
 a.download = 'dabimas-ability-v1.json';
 a.click();
 setTimeout(function () { URL.revokeObjectURL(a.href);}, 1000);
-$('io-msg').textContent = records.length + '件を書き出しました。';
+$('io-msg').textContent = records.length + '件の馬と' + plans.length + '件の繁殖計画を書き出しました。';
 $('io-error').textContent = '';
 });
 $('import-file').addEventListener('change', function (e) {
@@ -777,10 +898,25 @@ if (!validRecord(r)) throw new Error('不正なレコードがあります（馬
 if (ids[r.id]) throw new Error('IDが重複しています');
 ids[r.id] = true;
 });
+/* 繁殖計画：plans がある場合は検証して全件置き換え。ない旧形式のJSON
+   （馬だけ）の場合は、既存の繁殖計画はそのまま残す（後方互換）。 */
+var newPlans = plans;
+if (data.plans !== undefined) {
+if (!Array.isArray(data.plans)) throw new Error('繁殖計画の形式が違います');
+var pids = {};
+data.plans.forEach(function (p) {
+if (!validPlan(p)) throw new Error('不正な繁殖計画があります（計画名・ステータスを確認してください）');
+if (pids[p.id]) throw new Error('繁殖計画のIDが重複しています');
+pids[p.id] = true;
+});
+newPlans = data.plans;
+}
 records = data.records;
+plans = newPlans;
 saveAll(records);
-renderList(); resetForm();
-$('io-msg').textContent = records.length + '件を読み込みました（全件置き換え）。';
+savePlans(plans);
+renderList(); renderPlans(); resetForm(); resetPlanForm();
+$('io-msg').textContent = records.length + '件の馬と' + plans.length + '件の繁殖計画を読み込みました（全件置き換え）。';
 $('io-error').textContent = '';
 } catch (err) {
 /* 既存データは変えない */
@@ -802,4 +938,4 @@ if (pair[0] && Array.isArray(pair[0].cmt)) COMMENTS = pair[0];
 if (pair[1] && pair[1].ranges) RANKS = pair[1];
 });
 }
-loadData().then(function () { renderList(); updateGrowthBar();});
+loadData().then(function () { renderList(); renderPlans(); updateGrowthBar();});

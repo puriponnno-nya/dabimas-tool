@@ -242,9 +242,47 @@
     <p id="empty-note">まだ登録がありません。</p>
   </section>
 
+  <section aria-labelledby="plan-title">
+    <h2 id="plan-title">繁殖計画（<span id="plan-count">0</span>件）</h2>
+    <p class="note">繁殖計画の記録だけです。配合のシミュレーションはまだありません。父馬・母馬は名前で入力します（登録馬や攻略データベースからの選択は後のステップで追加します）。</p>
+    <details class="ref-details">
+      <summary>繁殖計画について（タップで開く）</summary>
+      <p class="note">完成形は5代先までの配合シミュレーターを想定していますが、今は計画の記録（計画名・父馬・母馬・ステータス・メモ）だけです。配合効果の表示はありません。未確定の配合効果を断定表示しません。</p>
+    </details>
+    <form id="plan-form">
+      <input type="hidden" id="plan-edit-id" value="">
+      <label>計画名（必須）
+        <input id="p-name" type="text" autocomplete="off" placeholder="例：テスト配合計画">
+      </label>
+      <div class="row">
+        <label>父馬名
+          <input id="p-sire" type="text" autocomplete="off" placeholder="例：テスト父馬">
+        </label>
+        <label>母馬名
+          <input id="p-dam" type="text" autocomplete="off" placeholder="例：テスト母馬">
+        </label>
+      </div>
+      <label>ステータス
+        <select id="p-status">
+          <option value="計画">計画</option>
+          <option value="予約">予約</option>
+          <option value="実行済み">実行済み</option>
+        </select>
+      </label>
+      <label>メモ
+        <input id="p-memo" type="text" autocomplete="off" placeholder="任意">
+      </label>
+      <p class="error" id="plan-form-error" role="alert"></p>
+      <button type="submit" id="plan-save-btn">計画を登録</button>
+      <button type="button" id="plan-cancel-edit" hidden>編集をやめる</button>
+    </form>
+    <ul id="plan-list"></ul>
+    <p id="plan-empty-note">まだ繁殖計画がありません。</p>
+  </section>
+
   <section aria-labelledby="io-title">
     <h2 id="io-title">バックアップ（JSON）</h2>
-    <p class="note">書き出しは全件、読み込みは全件置き換えです。不正なJSONは拒否して、既存の登録は変えません。</p>
+    <p class="note">書き出しは全件（馬＋繁殖計画）、読み込みは全件置き換えです。不正なJSONは拒否して、既存の登録は変えません。繁殖計画のない旧形式のJSONも読み込めます（その場合は既存の繁殖計画は残ります）。</p>
     <button type="button" id="export-btn">JSON書き出し</button>
     <label class="file-label">JSON読み込み
       <input type="file" id="import-file" accept="application/json,.json">
