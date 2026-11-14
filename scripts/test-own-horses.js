@@ -112,8 +112,8 @@ const childAnc = C.buildChildAnc(sire0, dam3);
 check('O01', '子の血統は15件で、祖先名は全件非空',
 Array.isArray(childAnc) && childAnc.length === 15 &&
 childAnc.every((a) => Array.isArray(a) && a[0]));
-check('O02', '子の血統0番目は父馬そのもの（子系統・因子は父馬のもの、親系統は空）',
-childAnc[0][0] === 'アイアンリージ-巌瓏-' && childAnc[0][1] === '' &&
+check('O02', '子の血統0番目は父馬そのもの（子系統・因子は父馬のもの、親系統は父馬の父の親系統＝Teddyで補う）',
+childAnc[0][0] === 'アイアンリージ-巌瓏-' && childAnc[0][1] === 'Teddy' &&
 childAnc[0][2] === 'テディ系' && childAnc[0][3] === '強' && childAnc[0][4] === '長',
 JSON.stringify(childAnc[0]));
 const ancNames = childAnc.map((a) => a[0]);
@@ -224,10 +224,10 @@ const funDam = fakeHorse('母F', { 0: 'E', 5: 'F', 8: 'G', 12: 'A'});
 const funChildAnc = C.buildChildAnc(funSire, funDam);
 const funChild = fakeOwnHorse('o-fun', '面白い子', '牡', funChildAnc, 2);
 const funOther = fakeHorse('相手馬', { 0: 'H', 5: 'I', 8: 'J', 12: 'K'});
-check('O18', '面白い配合：自家生産馬の親系統（1代ずらしたもの）が判定に使われる（7種類で成立）',
+check('O18', '面白い配合：自家生産馬の親系統（1代ずらしたもの）が判定に使われる（8種類で成立。子の anc[0] の親系統も父馬の父の親系統で補うため、空のときの7種類から1増える）',
 (() => {
 const r = C.checkMatingTheories(C.ownHorsePedigree(funChild), funOther);
-return r.omoshiroi.hit === true && r.omoshiroi.distinctCount === 7;
+return r.omoshiroi.hit === true && r.omoshiroi.distinctCount === 8;
 })());
 
 // --- O: 性別による出し分け ---

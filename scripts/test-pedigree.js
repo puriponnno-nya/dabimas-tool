@@ -280,6 +280,53 @@ function htmlContains(el, text) {
         html.includes('るんば') && html.includes('イッコ牧場') && html.includes('Gamerch');
     })());
 
+  // --- M: 奇跡の配合の実例（ギルデッドタイム×サクラクレアー→オルフェーヴル／ドリームジャーニー） ---
+  // 原因：旧 buildChildAnc は子の anc[0]（父そのもの）の親系統を空にしていたため、
+  // 自家生産馬を母にした2代目で面白い配合が6種類・見事な配合が3対4の多重集合不一致となり、
+  // 完璧な配合が成立せず奇跡の配合が出なかった。親系統は父系で受け継がれるため、
+  // anc[0] の親系統は父馬の父（anc[0]）の親系統で補う。
+  const gildedIdx = db.horses.findIndex((h) => h.n === 'ギルデッドタイム1992');
+  const sakuraIdx = db.horses.findIndex((h) => h.n === 'サクラクレアー');
+  const orfeIdx = db.horses.findIndex((h) => h.n === 'オルフェーヴル');
+  const dreamIdx = db.horses.findIndex((h) => h.n === 'ドリームジャーニー');
+  const lupinIdx = db.horses.findIndex((h) => h.n === 'ルパンザサード');
+  const gilded = db.horses[gildedIdx];
+  const sakura = db.horses[sakuraIdx];
+  const orfe = db.horses[orfeIdx];
+  const dream = db.horses[dreamIdx];
+  const lupin = db.horses[lupinIdx];
+  const childAncG = C.buildChildAnc(gilded, sakura);
+  const childAncL = C.buildChildAnc(lupin, sakura);
+  check('M46', '子の血統0番目（父そのもの）の親系統は父馬の父の親系統で補う（ギルデッドタイム→Teddy、ルパンザサード→Nasrullah）',
+    childAncG[0][0] === 'ギルデッドタイム1992' && childAncG[0][1] === 'Teddy' &&
+    childAncL[0][0] === 'ルパンザサード' && childAncL[0][1] === 'Nasrullah',
+    JSON.stringify([childAncG[0], childAncL[0]]));
+  // 2代目：1代目の子を自家生産馬として登録し、オルフェーヴル／ドリームジャーニーと配合する
+  C.ownHorses.push({ id: 'o-miracle-g', name: 'テストの子', sex: '牝', sireDbIndex: gildedIdx, damDbIndex: sakuraIdx, sireOwnId: null, damOwnId: null, generation: 2, anc: childAncG, sireName: gilded.n, damName: sakura.n });
+  const damMiracleG = C.resolveParentRef({ ownId: 'o-miracle-g' });
+  check('M47', '奇跡の配合：オルフェーヴル×（ギルデッドタイム×サクラクレアーの子）で成立（面白い7・見事・完璧、クロスはノーザンテースト 父母母父×母母父）',
+    (() => {
+      const r = C.checkMatingTheories(orfe, damMiracleG);
+      const html = C.buildChildPedigreeHtml(orfe, damMiracleG);
+      return r.omoshiroi.hit === true && r.omoshiroi.distinctCount === 7 &&
+        r.migoto.hit === true && r.perfect.hit === true &&
+        r.miracle.hit === true && r.miracle.cross.name === 'ノーザンテースト' &&
+        r.miracle.cross.sireLabel === '父母母父' && r.miracle.cross.damLabel === '母母父' &&
+        html.includes('奇跡の配合：当てはまるように見えます（参考）');
+    })());
+  check('M48', '奇跡の配合：ドリームジャーニー×（ギルデッドタイム×サクラクレアーの子）でも成立',
+    C.checkMatingTheories(dream, damMiracleG).miracle.hit === true);
+  // 旧形式：anc[0] の親系統が空のまま保存された自家生産馬を親に選んでも、父馬の父の親系統で補完されて奇跡が成立する
+  const legacyAnc = childAncG.map((a) => a.slice());
+  legacyAnc[0][1] = '';
+  C.ownHorses.push({ id: 'o-miracle-legacy', name: '旧形式の子', sex: '牝', sireDbIndex: gildedIdx, damDbIndex: sakuraIdx, sireOwnId: null, damOwnId: null, generation: 2, anc: legacyAnc, sireName: gilded.n, damName: sakura.n });
+  const damLegacy = C.resolveParentRef({ ownId: 'o-miracle-legacy' });
+  check('M49', '旧形式の自家生産馬（anc[0]の親系統が空）を親に選んでも補完されて奇跡の配合が成立する',
+    damLegacy && damLegacy.anc[0][1] === 'Teddy' &&
+    C.checkMatingTheories(orfe, damLegacy).miracle.hit === true &&
+    C.checkMatingTheories(dream, damLegacy).miracle.hit === true,
+    damLegacy ? JSON.stringify(damLegacy.anc[0]) : 'damLegacy is null');
+
   // --- M: どの理論も成立しない組み合わせ ---
   const sireNone = fakeHorse('父テスト馬', { 0: 'A', 4: 'A', 5: 'A', 7: 'A', 8: 'A', 11: 'A', 12: 'A', 14: 'A' });
   const damNone = fakeHorse('母テスト馬', { 0: 'B', 5: 'B', 8: 'B', 12: 'B' });

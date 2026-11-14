@@ -565,10 +565,39 @@ return null;
 /* 自家生産馬を、血統の組み立て・配合理論・インブリードで使う形
    {n, chi, f1, f2, anc} にそろえる。DB馬はそのままの形。
    自家生産馬自身の子系統・因子は不明のため空（空の親系統は配合理論では
-   数えない扱い。子の血統表の表示にも使わない）。 */
+   数えない扱い。子の血統表の表示にも使わない）。
+   旧形式で保存された自家生産馬（anc[0] の親系統が空のもの）は、ここで
+   父馬の父の親系統＝馬自身の親系統（父系で受け継がれるもの）で補い、
+   保存し直す（repairOwnHorseAnc0Pa 参照）。 */
 function ownHorsePedigree(o) {
 if (!o) return null;
+if (repairOwnHorseAnc0Pa(o)) saveOwnHorses(ownHorses);
 return { n: o.name, chi: '', f1: '', f2: '', anc: o.anc };
+}
+/* 旧形式で保存された自家生産馬の anc[0]（父そのもの）の親系統を補う。
+   馬自身の親系統は父系で受け継がれるため、父馬の父（anc[0]）の親系統と
+   同じ。父がDB馬ならその anc[0] の親系統、父が自家生産馬ならその父の
+   親系統を再帰で求める（循環参照は seen で防ぐ）。補えたら anc[0] に
+   入れて true を返す。既に親系統がある場合や補えない場合は false。 */
+function repairOwnHorseAnc0Pa(o, seen) {
+if (!o || !Array.isArray(o.anc) || !o.anc[0] || o.anc[0][1]) return false;
+seen = seen || {};
+if (o.id && seen[o.id]) return false;
+if (o.id) seen[o.id] = true;
+var pa = '';
+if (o.sireDbIndex !== null && o.sireDbIndex !== undefined &&
+STALLIONS && Array.isArray(STALLIONS.horses) && STALLIONS.horses[o.sireDbIndex]) {
+pa = stallionAncestor(STALLIONS.horses[o.sireDbIndex], 0).pa || '';
+} else if (o.sireOwnId) {
+var sireOwn = findOwnHorse(o.sireOwnId);
+if (sireOwn) {
+repairOwnHorseAnc0Pa(sireOwn, seen);
+pa = (sireOwn.anc && sireOwn.anc[0] && sireOwn.anc[0][1]) || '';
+}
+}
+if (!pa) return false;
+o.anc[0][1] = pa;
+return true;
 }
 function toPedigree(h) {
 if (!h) return null;
@@ -617,13 +646,15 @@ return Math.max(parentGeneration(sireRef), parentGeneration(damRef)) + 1;
 function defaultChildName(plan) { return (plan && plan.name ? plan.name : '配合計画') + 'の子'; }
 /* 子の血統（anc 15件）を組み立てる。buildChildPedigree の15行を
    [名前, 親系統, 子系統, 因子1, 因子2] に直したもの。
-   0番目（父そのもの）だけは行に親系統・因子がないため、父馬自身の
-   子系統・因子1・因子2を入れる。父馬自身の親系統はデータにないため空。 */
+   0番目（父そのもの）は行に因子がないため、父馬自身の子系統・因子1・
+   因子2を入れる。親系統は、父馬の父（anc[0]）の親系統＝父馬自身の
+   親系統（親系統は父系で受け継がれる）で補う。父馬の父の親系統が
+   分からない場合だけ空になる。 */
 function buildChildAnc(sire, dam) {
 var rows = buildChildPedigree(sire, dam);
 if (!rows) return null;
 var anc = rows.map(function (r) { return [r.name || '', r.pa || '', r.chi || '', r.f1 || '', r.f2 || '']; });
-anc[0] = [sire.n || '', '', sire.chi || '', sire.f1 || '', sire.f2 || ''];
+anc[0] = [sire.n || '', rows[0].pa || '', sire.chi || '', sire.f1 || '', sire.f2 || ''];
 return anc;
 }
 /* 両親の指定（refs: {sireName, damName, sireDbIndex, damDbIndex,
@@ -1534,7 +1565,9 @@ function buildChildPedigree(sire, dam) {
   var rows = [];
   for (var i = 0; i < 15; i++) {
     if (i === 0) {
-      rows.push({ label: '父', name: sire.n || '', pa: '', chi: '', f1: '', f2: '', side: 'sire', gen: 1 });
+      /* 父そのもの。親系統は父馬の父（anc[0]）の親系統＝父馬自身の
+         親系統（親系統は父系で受け継がれる）で補う。 */
+      rows.push({ label: '父', name: sire.n || '', pa: stallionAncestor(sire, 0).pa || '', chi: '', f1: '', f2: '', side: 'sire', gen: 1 });
       continue;
     }
     var src = (i < 8) ? sire : dam;
@@ -2393,7 +2426,7 @@ var a = o.anc[i] || [];
 rows += '<tr><td>' + esc(labels[i] || ('祖先' + (i + 1))) + '</td><td>' + esc(a[0] || '—') + '</td><td>' + esc(a[1] || '—') + '</td><td>' + esc([a[3], a[4]].filter(function (x) { return x; }).join('／') || '—') + '</td></tr>';
 }
 div.innerHTML = '<table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>因子</th></tr></thead><tbody>' + rows + '</tbody></table>'
-+ '<p class="note">子の血統は、両親の血統を1代ずらしたものです（参考・未検証）。父馬自身の親系統はデータにないため空欄です。配合理論の効果を断定する表示はしません。</p>';
++ '<p class="note">子の血統は、両親の血統を1代ずらしたものです（参考・未検証）。父馬自身の親系統は、父馬の父の親系統（父系で受け継がれるもの）で補います。配合理論の効果を断定する表示はしません。</p>';
 det.appendChild(div);
 li.appendChild(det);
 if (ownHorseEligibleFor('sire', o)) {
