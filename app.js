@@ -705,8 +705,8 @@ return true;
 /* ---------- 1つの計画での多世代の配合（ステップ5） ---------- */
 /* 計画の中に世代（ステップ）の列を持たせる。第1世代＝今までの計画
    （父・母→子）。第2世代以降は、前の世代の子を親として同じ計画の中で
-   続ける。配合理論の判定はステップ3と同じものだけを使い（面白い／見事な／
-   よくできた、すべて参考・未検証）、新しい配合理論は追加しない。
+   続ける。配合理論の判定はステップ3のものに、ステップ6で追加した
+   完璧／超完璧／奇跡／危険を加えたものを使う（すべて参考・未検証）。
    世代のデータ：
    {id, childName, childSex, sireName, damName,
     sireDbIndex, damDbIndex, sireOwnId, damOwnId,
@@ -1605,10 +1605,71 @@ function distinctKinds(list) {
      空の親系統は除いて比べ、除いたあと両方が空でない場合だけ成立とする。
    よくできた配合：上記2つの4頭集合の、共通する親系統の種類数が3種類以上で、
      見事な配合でない場合。
-   完璧な配合：見事＋面白いの同時成立だけでは断定できない（種牡馬自身が
-     面白い配合であることも必要とする説明があり、未確認のため）。判定しない。
-   至高の配合：この機能では判定しない（未確認）。危険な配合：根拠が不確かな
-   ので判定しない。 */
+   完璧な配合（ステップ6で追加）：見事な配合と面白い配合が同時に成立すること。
+     Appliv式を主とする。dbms-go.netは「種牡馬自身が面白い配合で配合されて
+     いることが必須」とも書くが、種牡馬自身の配合は血統データだけでは確認
+     できないため、その点は未確認として注記する。効果の数値は表示しない。
+   超完璧な配合（ステップ6で追加）：見事な配合が成立し、かつ面白い配合の
+     8頭の親系統が8種類すべて異なること。効果の数値は条件付き実測値のため
+     表示しない。
+   奇跡の配合（ステップ6で追加）：完璧な配合の成立が前提。さらに4×3のクロス：
+     最終産駒から見て、一方の4代前ともう一方の3代前に同じ祖先がいること。
+     位置制限あり：3代前は繁殖牝馬側の母母父（子の血統表で13番目の母母父）
+     のみ有効。4代前は種牡馬側の4代前ならどこでもよい（子の血統表で4・5・
+     7・8番目の父父父父／父父母父／父母父父／父母母父）。名前の一致で判定する
+     ため、兄弟クロス（異なる馬同士の全兄弟）は分からず、その限界を注記する。
+     牝馬クロスが4代前でも無効という出典もあるが、祖先の性別データがないため
+     判定できず、注記する。因子別の効果数値は表示しない。
+   至高の配合：この機能では判定しない（未確認）。ver.5.0.0（2025-10-29）の
+     更新情報に「配合理論『至高の配合』を追加しました」とあることは注記する。
+   危険な配合（ステップ6で追加）：1×Nおよび2×2のクロスが発生すると危険な
+     配合になる。1×N：父馬名または母馬名そのものが相手方の血統に出る場合。
+     2×2：父方2代（父父）と母方2代（母父）に同じ祖先が出る場合。父母・母母の
+     名前は血統データに牝馬が出ないため分からず、2×2は父父×母父の一致だけを
+     判定する。受胎率の数値は未検証のため表示しない。兄弟姉妹クロスは血統表に
+     牝馬が出ないため判定できない場合があることを注記する。
+   どの理論も、判定には根拠（どの祖先・系統が一致したか）を一緒に表示し、
+   すべて「参考・未検証」と明記し、効果を断定しない。数値効果は表示しない。 */
+function checkMiracleCross(sire, dam) {
+  /* 4×3のクロス（奇跡の配合用）。子の血統表の rows[12]（母母父・3代前）と、
+     種牡馬側の4代前 rows[3,4,6,7]（父父父父／父父母父／父母父父／父母母父）の
+     名前が一致すれば成立。返り値は {hit, name, sireLabel} または {hit:false}。 */
+  var rows = buildChildPedigree(sire, dam);
+  if (!rows) return { hit: false };
+  var dam3 = rows[12];
+  if (!dam3 || !dam3.name) return { hit: false };
+  var sire4Idx = [3, 4, 6, 7];
+  for (var i = 0; i < sire4Idx.length; i++) {
+    var r = rows[sire4Idx[i]];
+    if (r && r.name && r.name === dam3.name) {
+      return { hit: true, name: dam3.name, sireLabel: r.label, damLabel: dam3.label };
+    }
+  }
+  return { hit: false };
+}
+function checkDangerous(sire, dam) {
+  /* 危険な配合：findInbreeding の両方に出る祖先の組み合わせから、
+     1×N（父馬名・母馬名そのものが相手方の血統に出る）と
+     2×2（父方2代×母方2代の一致）を拾う。1×1（父馬名＝母馬名そのもの）は
+     除外する。返り値は {hit, details: [{type, name, sireLabel, sireGen,
+     damLabel, damGen}]}。type は '1xN' または '2x2'。 */
+  var details = [];
+  var seen = {};
+  function add(type, name, pr) {
+    var key = type + '|' + name + '|' + pr.sireLabel + '|' + pr.damLabel;
+    if (seen[key]) return;
+    seen[key] = true;
+    details.push({ type: type, name: name, sireLabel: pr.sireLabel, sireGen: pr.sireGen, damLabel: pr.damLabel, damGen: pr.damGen });
+  }
+  findInbreeding(sire, dam).forEach(function (c) {
+    c.pairs.forEach(function (pr) {
+      if (pr.sireGen === 1 && pr.damGen >= 2) add('1xN', c.name, pr);
+      else if (pr.damGen === 1 && pr.sireGen >= 2) add('1xN', c.name, pr);
+      else if (pr.sireGen === 2 && pr.damGen === 2) add('2x2', c.name, pr);
+    });
+  });
+  return { hit: details.length > 0, details: details };
+}
 function checkMatingTheories(sire, dam) {
   if (!sire || !dam) return null;
   function paList(h, idxs) { return idxs.map(function (i) { return stallionAncestor(h, i).pa; }); }
@@ -1621,12 +1682,21 @@ function checkMatingTheories(sire, dam) {
   var migoto = sireSet4Multi.length > 0 && damSet4Multi.length > 0 && sameMultiset(sireSet4Multi, damSet4Multi);
   var commonKinds = distinctKinds(sireSet4Multi).filter(function (x) { return distinctKinds(damSet4Multi).indexOf(x) >= 0; });
   var yokudekita = !migoto && commonKinds.length >= 3;
+  var perfect = omoshiroi && migoto;
+  var superPerfect = migoto && eightKinds.length === 8;
+  var miracleCross = checkMiracleCross(sire, dam);
+  var miracle = perfect && miracleCross.hit;
+  var dangerous = checkDangerous(sire, dam);
   return {
     omoshiroi: { hit: omoshiroi, distinctCount: eightKinds.length, kinds: eightKinds },
     migoto: { hit: migoto, sireKinds: sireSet4Multi, damKinds: damSet4Multi },
     yokudekita: { hit: yokudekita, commonCount: commonKinds.length, commonKinds: commonKinds },
-    perfectLookalike: omoshiroi && migoto,
-    anyHit: omoshiroi || migoto || yokudekita
+    perfect: { hit: perfect },
+    perfectLookalike: perfect,
+    superPerfect: { hit: superPerfect, distinctCount: eightKinds.length, kinds: eightKinds },
+    miracle: { hit: miracle, cross: miracleCross },
+    dangerous: dangerous,
+    anyHit: omoshiroi || migoto || yokudekita || perfect || superPerfect || miracle
   };
 }
 /* 子の血統・配合理論の確認の表示（折りたたみ・既定は閉じる）。 */
@@ -1654,14 +1724,37 @@ function buildChildPedigreeHtml(sire, dam) {
     ' — 父馬の 父父母父／父母母父／母父母父／母母母父 の親系統（' + esc(th.migoto.sireKinds.join('、') || 'なし') + '）と、母馬の 父／父母父／母父／母母父 の親系統（' + esc(th.migoto.damKinds.join('、') || 'なし') + '）の多重集合が' + (th.migoto.hit ? '一致します' : '一致しません') + '。参考条件です。</li>';
   html += '<li>よくできた配合：' + (th.yokudekita.hit ? '当てはまるように見えます（参考）' : '当てはまりません') +
     ' — 上の2つの4頭集合で共通する親系統は' + th.yokudekita.commonCount + '種類（' + esc(th.yokudekita.commonKinds.join('、') || 'なし') + '）。3種類以上で、見事な配合でない場合に成立とする参考条件です。</li>';
-  if (th.perfectLookalike) {
-    html += '<li>完璧な配合：見事＋面白いの条件に当てはまるように見えますが、種牡馬自身が面白い配合であることも必要とする説明があり未確認のため、ここでは判定しません（参考）。</li>';
+  if (th.perfect.hit) {
+    html += '<li>完璧な配合：当てはまるように見えます（参考） — 見事な配合と面白い配合が同時に成立する参考条件です。ただし、種牡馬自身が面白い配合であることも必要とする説明（dbms-go.net）があり、血統データだけでは確認できないため、その点は未確認です。効果の数値は表示しません。</li>';
   } else {
-    html += '<li>完璧な配合：ここでは判定しません（見事＋面白いの同時成立だけでは断定できず、種牡馬自身の条件があり未確認のため）。</li>';
+    html += '<li>完璧な配合：当てはまりません — 見事な配合と面白い配合の両方が成立する場合に当てはまるように見えます（参考）。種牡馬自身の条件については血統データだけでは確認できず未確認です。</li>';
   }
-  html += '<li>至高の配合：未確認です。この機能では判定しません。</li>';
-  html += '<li>危険な配合：根拠が不確かなので判定しません。</li></ul>';
-  if (!th.anyHit) html += '<p>この組み合わせでは、確認できた配合理論はありません（参考）。</p>';
+  if (th.superPerfect.hit) {
+    html += '<li>超完璧な配合：当てはまるように見えます（参考） — 見事な配合が成立し、面白い配合の8頭の親系統が8種類すべて異なります（' + esc(th.superPerfect.kinds.join('、')) + '）。効果の数値は条件付き実測値のため表示しません。</li>';
+  } else {
+    html += '<li>超完璧な配合：当てはまりません — 見事な配合が成立し、かつ面白い配合の8頭の親系統が8種類（現在' + th.superPerfect.distinctCount + '種類）の場合に当てはまるように見えます（参考）。</li>';
+  }
+  if (th.miracle.hit) {
+    html += '<li>奇跡の配合：当てはまるように見えます（参考） — 完璧な配合が成立し、さらに4×3のクロスがあります。「' + esc(th.miracle.cross.name) + '」が種牡馬側4代前（' + esc(th.miracle.cross.sireLabel) + '）と繁殖牝馬側3代前（' + esc(th.miracle.cross.damLabel) + '）にいます。名前の一致だけで判定しているため、兄弟クロス（異なる馬同士の全兄弟）は分からず、判定の限界です。牝馬クロスが4代前でも無効という出典もありますが、祖先の性別データがないため判定できません。配合掲示板には表示されない隠し要素とされます。因子別の効果数値は表示しません。</li>';
+  } else if (!th.perfect.hit) {
+    html += '<li>奇跡の配合：当てはまりません — 完璧な配合の成立が前提のため、まず完璧な配合の条件を確認してください（参考）。</li>';
+  } else {
+    html += '<li>奇跡の配合：当てはまりません — 完璧な配合は成立していますが、種牡馬側4代前と繁殖牝馬側3代前（母母父）に同じ祖先がいる4×3のクロスは見つかりませんでした（参考）。名前の一致だけで判定しています。</li>';
+  }
+  html += '<li>至高の配合：未確認です。この機能では判定しません。「同一の種牡馬で3×4×5のクロス、因子6種類以上」という核はありますが、「因子6種類以上」の数える範囲と3・4・5代の割り振りが出典で明示されておらず、効果も出典間で矛盾しているため判定しません。存在自体は公式で、ver.5.0.0（2025-10-29）の更新情報に「配合理論『至高の配合』を追加しました」とあります。</li>';
+  if (th.dangerous.hit) {
+    html += '<li>危険な配合：当てはまるように見えます（参考） — ' + th.dangerous.details.map(function (d) {
+      if (d.type === '1xN') {
+        return '「' + esc(d.name) + '」が父方' + d.sireGen + '代（' + esc(d.sireLabel) + '）×母方' + d.damGen + '代（' + esc(d.damLabel) + '）に出るため、1×' + (d.sireGen === 1 ? d.damGen : d.sireGen) + 'のクロス';
+      }
+      return '「' + esc(d.name) + '」が父方2代（' + esc(d.sireLabel) + '）×母方2代（' + esc(d.damLabel) + '）に出るため、2×2のクロス';
+    }).join('／') + '。受胎率の数値は未検証のため表示しません。2×2は父父×母父の一致だけを判定しています（父母・母母の名前は血統データに牝馬が出ないため分かりません）。兄弟姉妹クロスは血統表に牝馬が出ないため判定できない場合があります。</li>';
+  } else {
+    html += '<li>危険な配合：当てはまりません — 父馬名・母馬名そのものが相手方の血統に出る1×Nのクロスも、父方2代×母方2代の2×2のクロスも見つかりませんでした（参考）。2×2は父父×母父の一致だけを判定しています（父母・母母の名前は血統データに牝馬が出ないため分かりません）。</li>';
+  }
+  html += '</ul>';
+  if (!th.anyHit && !th.dangerous.hit) html += '<p>この組み合わせでは、確認できた配合理論はありません（参考）。</p>';
+  if (!th.anyHit && th.dangerous.hit) html += '<p>当てはまるプラスの配合理論はありませんでしたが、危険な配合の条件に当てはまるように見えます（参考）。</p>';
   var crosses = findInbreeding(sire, dam);
   html += '<h4>インブリード（クロス・参考）</h4>';
   if (!crosses.length) {
@@ -1675,7 +1768,7 @@ function buildChildPedigreeHtml(sire, dam) {
       return '<li>' + esc(c.name) + '：' + esc(pairs) + (factors ? '（因子：' + esc(factors) + '）' : '') + '</li>';
     }).join('') + '</ul>';
   }
-  html += '<p class="note">出典（ユーザー攻略記事。公式仕様ではありません）：<a href="https://games.app-liv.jp/archives/232008" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」</a>、<a href="https://games.app-liv.jp/archives/198428" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のポイント」</a>、<a href="https://dbms-go.net/配合解説/完璧な配合/" target="_blank" rel="noopener">dbms-go.net「完璧な配合」</a>。詳しくは docs/rules.md を見てください。</p>';
+  html += '<p class="note">出典（ユーザー攻略記事。公式仕様ではありません）：<a href="https://games.app-liv.jp/archives/232008" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」</a>、<a href="https://games.app-liv.jp/archives/198428" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のポイント」</a>、<a href="https://dbms-go.net/配合解説/完璧な配合/" target="_blank" rel="noopener">dbms-go.net「完璧な配合」</a>、<a href="https://dabimasu.gamerch.com/%E5%AE%8C%E7%92%A7%E3%81%AA%E9%85%8D%E5%90%88" target="_blank" rel="noopener">Gamerch「完璧な配合」</a>、<a href="https://note.com/runbarunba1218/n/n1952a2d129aa" target="_blank" rel="noopener">るんば note「超完璧・奇跡の配合」</a>、<a href="https://note.com/huh_ds/n/n0eb8a439d3f3" target="_blank" rel="noopener">ふふ牧場 note「ダビマス 備忘録」</a>、<a href="https://note.com/sashimi_sky/n/n65db77ba6661" target="_blank" rel="noopener">しまむら牧場 note「奇跡の配合」</a>、<a href="https://note.com/derbymas/n/n4352f6b2c96f" target="_blank" rel="noopener">スマイル牧場 note「奇跡の配合」</a>、<a href="https://note.com/dabimas_ikko/n/ndf3449c98068" target="_blank" rel="noopener">イッコ牧場 note「危険な配合」</a>。詳しくは docs/rules.md を見てください。</p>';
   html += '</details>';
   return html;
 }

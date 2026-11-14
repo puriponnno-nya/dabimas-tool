@@ -162,16 +162,122 @@ function htmlContains(el, text) {
   check('M15', 'よくできた配合：両方に重複があり多重集合が違えばよくできたが成立',
     (() => { const r = C.checkMatingTheories(sireYoku4, damYoku4); return r.migoto.hit === false && r.yokudekita.hit === true && r.yokudekita.commonCount === 3; })());
 
-  // --- M: 完璧な配合は判定しない（見事＋面白いの同時成立でも） ---
+  // --- M: 完璧な配合（見事＋面白いの同時成立） ---
   const sirePerfect = fakeHorse('父テスト馬', { 0: 'A', 4: 'P', 5: 'B', 7: 'Q', 8: 'C', 11: 'R', 12: 'D', 14: 'S' });
   const damPerfect = fakeHorse('母テスト馬', { 0: 'S', 5: 'R', 8: 'Q', 12: 'P' });
-  check('M16', '完璧の条件に見える組み合わせでも判定しない注記だけ出す',
+  check('M16', '完璧な配合：見事＋面白いの同時成立で判定する',
     (() => {
       const r = C.checkMatingTheories(sirePerfect, damPerfect);
       const html = C.buildChildPedigreeHtml(sirePerfect, damPerfect);
-      return r.perfectLookalike === true && r.migoto.hit === true && r.omoshiroi.hit === true &&
-        html.includes('完璧な配合：見事＋面白いの条件に当てはまるように見えますが') &&
-        html.includes('ここでは判定しません');
+      return r.perfect.hit === true && r.migoto.hit === true && r.omoshiroi.hit === true &&
+        html.includes('完璧な配合：当てはまるように見えます（参考）') &&
+        html.includes('種牡馬自身が面白い配合であることも必要とする説明');
+    })());
+  // 完璧だが面白い系統が7種類なら超完璧ではない（見事は成立）
+  const sirePerfect7 = fakeHorse('父テスト馬', { 0: 'A', 4: 'P', 5: 'B', 7: 'Q', 8: 'C', 11: 'R', 12: 'P', 14: 'S' });
+  check('M31', '超完璧な配合：面白い系統7種類では不成立（完璧は成立）',
+    (() => {
+      const r = C.checkMatingTheories(sirePerfect7, damPerfect);
+      return r.perfect.hit === true && r.omoshiroi.distinctCount === 7 && r.superPerfect.hit === false;
+    })());
+  check('M32', '超完璧な配合：面白い系統8種類＋見事で成立',
+    (() => {
+      const r = C.checkMatingTheories(sirePerfect, damPerfect);
+      const html = C.buildChildPedigreeHtml(sirePerfect, damPerfect);
+      return r.superPerfect.hit === true && r.superPerfect.distinctCount === 8 &&
+        html.includes('超完璧な配合：当てはまるように見えます（参考）');
+    })());
+  check('M33', '超完璧な配合：見事でなければ不成立（面白い系統8種類でも）',
+    (() => {
+      const damNoMigoto = fakeHorse('母テスト馬', { 0: 'E', 5: 'F', 8: 'G', 12: 'H' });
+      const sire8 = fakeHorse('父テスト馬', { 0: 'A', 5: 'B', 8: 'C', 12: 'D' });
+      const r = C.checkMatingTheories(sire8, damNoMigoto);
+      return r.omoshiroi.distinctCount === 8 && r.migoto.hit === false && r.superPerfect.hit === false;
+    })());
+
+  // --- M: 奇跡の配合（完璧＋4×3クロス。3代前は母母父のみ、4代前は種牡馬側4代） ---
+  // rows[12]（母母父）＝母馬 anc[8]、rows[3]（父父父父）＝父馬 anc[2]。
+  const sireMiracle = fakeHorse('父テスト馬', { 0: 'A', 4: 'P', 5: 'B', 7: 'Q', 8: 'C', 11: 'R', 12: 'D', 14: 'S' }, { 2: '奇跡クロス馬' });
+  const damMiracle = fakeHorse('母テスト馬', { 0: 'S', 5: 'R', 8: 'Q', 12: 'P' }, { 8: '奇跡クロス馬' });
+  check('M34', '奇跡の配合：完璧＋母母父×父父父父の4×3クロスで成立',
+    (() => {
+      const r = C.checkMatingTheories(sireMiracle, damMiracle);
+      const html = C.buildChildPedigreeHtml(sireMiracle, damMiracle);
+      return r.perfect.hit === true && r.miracle.hit === true && r.miracle.cross.name === '奇跡クロス馬' &&
+        r.miracle.cross.sireLabel === '父父父父' && r.miracle.cross.damLabel === '母母父' &&
+        html.includes('奇跡の配合：当てはまるように見えます（参考）') &&
+        html.includes('兄弟クロス');
+    })());
+  check('M35', '奇跡の配合：完璧でなければ4×3クロスがあっても不成立',
+    (() => {
+      const sireNoPerfect = fakeHorse('父テスト馬', { 0: 'A', 5: 'B', 8: 'C', 12: 'D' }, { 2: '奇跡クロス馬' });
+      const r = C.checkMatingTheories(sireNoPerfect, damMiracle);
+      return r.perfect.hit === false && r.miracle.hit === false;
+    })());
+  check('M36', '奇跡の配合：3代前が母父父（母馬 anc[1]）では不成立（母母父のみ有効）',
+    (() => {
+      const damWrong3 = fakeHorse('母テスト馬', { 0: 'S', 5: 'R', 8: 'Q', 12: 'P' }, { 1: '奇跡クロス馬' });
+      const r = C.checkMatingTheories(sireMiracle, damWrong3);
+      return r.perfect.hit === true && r.miracle.hit === false;
+    })());
+  check('M37', '奇跡の配合：4代前が種牡馬側3代（父馬 anc[8]＝父母父）では不成立',
+    (() => {
+      const sireWrong4 = fakeHorse('父テスト馬', { 0: 'A', 4: 'P', 5: 'B', 7: 'Q', 8: 'C', 11: 'R', 12: 'D', 14: 'S' }, { 8: '奇跡クロス馬' });
+      const r = C.checkMatingTheories(sireWrong4, damMiracle);
+      return r.perfect.hit === true && r.miracle.hit === false;
+    })());
+  check('M38', '奇跡の配合：種牡馬側の別の4代前（父父母父＝父馬 anc[5]）でも成立',
+    (() => {
+      const sireAlt4 = fakeHorse('父テスト馬', { 0: 'A', 4: 'P', 5: 'B', 7: 'Q', 8: 'C', 11: 'R', 12: 'D', 14: 'S' }, { 5: '奇跡クロス馬' });
+      const r = C.checkMatingTheories(sireAlt4, damMiracle);
+      return r.miracle.hit === true && r.miracle.cross.sireLabel === '父父母父';
+    })());
+
+  // --- M: 危険な配合（1×N・2×2） ---
+  // 1×2：父馬名そのものが母方2代（母父＝母馬 anc[0]）に出る。
+  const damDanger1 = fakeHorse('母テスト馬', {}, { 0: '父テスト馬' });
+  check('M39', '危険な配合：父馬名が母父に出れば1×2で成立',
+    (() => {
+      const r = C.checkMatingTheories(sireFun, damDanger1);
+      const html = C.buildChildPedigreeHtml(sireFun, damDanger1);
+      return r.dangerous.hit === true &&
+        r.dangerous.details.some((d) => d.type === '1xN' && d.name === '父テスト馬' && d.damGen === 2 && d.damLabel === '母父') &&
+        html.includes('危険な配合：当てはまるように見えます（参考）') && html.includes('1×2');
+    })());
+  // 1×2（逆向き）：母馬名そのものが父方2代（父父＝父馬 anc[0]）に出る。
+  const sireDanger1 = fakeHorse('父テスト馬', {}, { 0: '母テスト馬' });
+  check('M40', '危険な配合：母馬名が父父に出れば1×2で成立',
+    (() => {
+      const r = C.checkMatingTheories(sireDanger1, damFun7);
+      return r.dangerous.hit === true &&
+        r.dangerous.details.some((d) => d.type === '1xN' && d.name === '母テスト馬' && d.sireGen === 2 && d.sireLabel === '父父');
+    })());
+  // 2×2：父父（父馬 anc[0]）と母父（母馬 anc[0]）が同じ祖先。
+  const sireDanger2 = fakeHorse('父テスト馬', {}, { 0: '共通祖先馬' });
+  const damDanger2 = fakeHorse('母テスト馬', {}, { 0: '共通祖先馬' });
+  check('M41', '危険な配合：父父×母父が同じ祖先なら2×2で成立',
+    (() => {
+      const r = C.checkMatingTheories(sireDanger2, damDanger2);
+      return r.dangerous.hit === true &&
+        r.dangerous.details.some((d) => d.type === '2x2' && d.name === '共通祖先馬');
+    })());
+  check('M42', '危険な配合：実レコード2頭では不成立',
+    C.checkMatingTheories(sire0, dam3).dangerous.hit === false);
+  check('M43', '危険な配合だけの組み合わせは「プラスの理論なし＋危険あり」と表示される',
+    (() => {
+      const r = C.checkMatingTheories(sireDanger2, damDanger2);
+      const html = C.buildChildPedigreeHtml(sireDanger2, damDanger2);
+      return r.anyHit === false && r.dangerous.hit === true &&
+        html.includes('当てはまるプラスの配合理論はありませんでしたが、危険な配合の条件に当てはまるように見えます');
+    })());
+  check('M44', '至高の配合は判定せず、ver.5.0.0の追加が注記される',
+    C.buildChildPedigreeHtml(sire0, dam3).includes('至高の配合：未確認です') &&
+    C.buildChildPedigreeHtml(sire0, dam3).includes('ver.5.0.0（2025-10-29）'));
+  check('M45', '表示：新しい4理論の出典が表示される',
+    (() => {
+      const html = C.buildChildPedigreeHtml(sire0, dam3);
+      return html.includes('超完璧な配合') && html.includes('奇跡の配合') &&
+        html.includes('るんば') && html.includes('イッコ牧場') && html.includes('Gamerch');
     })());
 
   // --- M: どの理論も成立しない組み合わせ ---

@@ -334,10 +334,11 @@ function collectHtml(el) {
     !htmlContains(brokenLis[0], '第3世代の血統') &&
     collectHtml(brokenLis[0]).indexOf('第1世代') < collectHtml(brokenLis[0]).indexOf('第2世代'));
   const htmlReal = C.buildChildPedigreeHtml(sire0, dam3);
-  check('N22', '配合理論は面白い／見事な／よくできたの3つだけで、新しい理論（奇跡の配合など）は追加しない',
+  check('N22', '配合理論は面白い／見事な／よくできたに加え、完璧／超完璧／奇跡／危険も表示される',
     htmlReal.includes('面白い配合') && htmlReal.includes('見事な配合') &&
-    htmlReal.includes('よくできた配合') && !htmlReal.includes('奇跡') &&
-    htmlReal.includes('参考・未検証'));
+    htmlReal.includes('よくできた配合') && htmlReal.includes('完璧な配合') &&
+    htmlReal.includes('超完璧な配合') && htmlReal.includes('奇跡の配合') &&
+    htmlReal.includes('危険な配合') && htmlReal.includes('参考・未検証'));
   const planI = makeDbPlan('pI', '候補テスト');
   C.plans = [planI];
   const genI = genOf(planI, 0);
