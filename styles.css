@@ -171,5 +171,14 @@ footer { margin-top: 26px; }
   margin: 12px 0; background: #0e1330;
 }
 .generation h3 { margin: 4px 0 6px; color: #ffd34d; }
+/* 配合理論のプレビュー（保存前）：計画フォームと世代の欄に出す。
+   保存後の確認と同じ判定・文言で、枠で区切って見やすくする。 */
+.theory-preview {
+  border: 1px solid #2c3f7d; border-radius: 16px; padding: 10px 14px;
+  margin: 8px 0; background: #0e1330;
+}
+.theory-preview h4 { margin: 4px 0 6px; font-size: 14px; color: #ffd34d; }
+.theory-preview ul { list-style: disc; padding-left: 20px; }
+.theory-preview li { font-size: 14px; margin: 4px 0; }
 .gen-editor { margin: 8px 0; }
 .gen-next, .gen-delete { margin: 8px 0; }

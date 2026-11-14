@@ -1341,6 +1341,11 @@ talent: e.talent? e.talent.value: ''
 /* 欄の下の「DBから選択／自家生産馬から選択／名前だけの入力」の表示。 */
 function updatePlanDbStatus(role, ctx) {
 ctx = ctx || formSuggestCtx(role);
+/* 計画フォームの場合は、選択が変わるたびに配合理論のプレビューも更新する。
+   プレビューは選択状態（store）と欄の入力値だけを見るので、表示文言の
+   更新より先に呼んでよい。世代の欄は buildGenParentEditor の
+   refreshGenPreview が担当する（ctx.isForm が偽の場合は何もしない）。 */
+if (ctx.isForm) updatePlanTheoryPreview();
 var e = ctx.els;
 if (!e.status) return;
 var ownId = ctx.store.getOwn(ctx.role);
@@ -1732,25 +1737,15 @@ function checkMatingTheories(sire, dam) {
     anyHit: omoshiroi || migoto || yokudekita || perfect || superPerfect || miracle
   };
 }
-/* 子の血統・配合理論の確認の表示（折りたたみ・既定は閉じる）。 */
-function buildChildPedigreeHtml(sire, dam) {
-  var rows = buildChildPedigree(sire, dam);
-  if (!rows) return '';
-  var nameToIdx = stallionNameToIndex();
-  var html = '<details class="ref-details"><summary>子の血統・配合理論を見る（参考・未検証）</summary>';
-  html += '<p>子の父：' + esc(sire.n || '') + ' ／ 子の母：' + esc(dam.n || '') + '</p>';
-  html += '<h4>子の血統表（5代・参考）</h4><table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>因子</th><th>DB</th></tr></thead><tbody>';
-  rows.forEach(function (r) {
-    var idx = (r.name && nameToIdx[r.name] !== undefined) ? nameToIdx[r.name] : null;
-    html += '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.name || '—') + '</td><td>' + esc(r.pa || '—') + '</td><td>' +
-      esc([r.f1, r.f2].filter(function (x) { return x; }).join('／') || '—') + '</td><td>' +
-      (idx !== null ? 'DBにあり <button type="button" data-stallion-idx="' + idx + '">詳細</button>' : '—') + '</td></tr>';
-  });
-  html += '</tbody></table>';
-  html += '<p class="note">祖先名がデータベース内の馬名と完全一致する場合は「DBにあり」と表示し、「詳細」でその馬の血統・詳細を見られます。</p>';
-  var th = checkMatingTheories(sire, dam);
-  html += '<h4>配合理論の確認（参考・未検証）</h4>';
-  html += '<p class="note">ユーザー攻略記事による推定・共有情報で、公式仕様ではありません。配合の効果を断定する表示はしません。</p><ul>';
+/* ---------- 配合理論のプレビュー（保存前） ---------- */
+/* 保存後の確認（buildChildPedigreeHtml）と保存前のプレビューで、配合理論の
+   表示を同じ関数（matingTheorySummaryHtml）から作る。判定はどちらも
+   checkMatingTheories を使うので、保存前に見た想定と保存後の判定は一致
+   する。すべて参考・未検証で、配合の効果を断定しない。 */
+/* checkMatingTheories の返り値 th を受け取り、理論の一覧（<ul>）と
+   「理論なし」の注記を返す。buildChildPedigreeHtml とプレビューで共通。 */
+function matingTheorySummaryHtml(th) {
+  var html = '<p class="note">ユーザー攻略記事による推定・共有情報で、公式仕様ではありません。配合の効果を断定する表示はしません。</p><ul>';
   html += '<li>面白い配合：' + (th.omoshiroi.hit ? '当てはまるように見えます（参考）' : '当てはまりません') +
     ' — 父馬・母馬の 父／父母父／母父／母母父 の計8頭の親系統は' + th.omoshiroi.distinctCount + '種類（' + esc(th.omoshiroi.kinds.join('、') || 'なし') + '）。7種類以上で成立とする参考条件です。</li>';
   html += '<li>見事な配合：' + (th.migoto.hit ? '当てはまるように見えます（参考）' : '当てはまりません') +
@@ -1788,6 +1783,93 @@ function buildChildPedigreeHtml(sire, dam) {
   html += '</ul>';
   if (!th.anyHit && !th.dangerous.hit) html += '<p>この組み合わせでは、確認できた配合理論はありません（参考）。</p>';
   if (!th.anyHit && th.dangerous.hit) html += '<p>当てはまるプラスの配合理論はありませんでしたが、危険な配合の条件に当てはまるように見えます（参考）。</p>';
+  return html;
+}
+/* プレビューの状態を決める純粋な関数（DOMを使わない）。
+   sire/dam は resolveParentRef で解決した馬（解決できなければ null）。
+   sireName/damName は欄の入力文字列（名前だけの入力の検出用）。
+   sireHasRef/damHasRef は、その側がDB・自家生産馬から選ばれているか
+   （選んだのに解決できなかった＝見つからない場合の検出用）。
+   返り値: {status, missingRole, sire, dam, theories}。
+   status は 'empty'（両方とも未入力）／'one-side'（片方だけ）／
+   'name-only'（両方に名前はあるが、どちらか／両方がDB・自家生産馬から
+   選ばれていないため血統が分からない）／'missing'（選んだ親が見つから
+   ない）／'ok'（両方とも解決できた）。'ok' の場合だけ theories に
+   checkMatingTheories の返り値が入る。 */
+function matingTheoryPreview(sire, dam, sireName, damName, sireHasRef, damHasRef) {
+  var sireNamed = !!(sireName && String(sireName).trim());
+  var damNamed = !!(damName && String(damName).trim());
+  var sirePresent = sireNamed || !!sireHasRef;
+  var damPresent = damNamed || !!damHasRef;
+  if (!sirePresent && !damPresent) return { status: 'empty', missingRole: null, sire: sire, dam: dam, theories: null };
+  if (sireHasRef && !sire) return { status: 'missing', missingRole: 'sire', sire: sire, dam: dam, theories: null };
+  if (damHasRef && !dam) return { status: 'missing', missingRole: 'dam', sire: sire, dam: dam, theories: null };
+  if (sirePresent && !damPresent) return { status: 'one-side', missingRole: 'dam', sire: sire, dam: dam, theories: null };
+  if (!sirePresent && damPresent) return { status: 'one-side', missingRole: 'sire', sire: sire, dam: dam, theories: null };
+  if (!sireHasRef || !damHasRef) return { status: 'name-only', missingRole: null, sire: sire, dam: dam, theories: null };
+  return { status: 'ok', missingRole: null, sire: sire, dam: dam, theories: checkMatingTheories(sire, dam) };
+}
+/* プレビューの表示（matingTheoryPreview の返り値を受け取る）。保存後の
+   確認と同じ matingTheorySummaryHtml を使うので、文言と判定は一致する。 */
+function matingTheoryPreviewHtml(pv) {
+  if (!pv) return '';
+  if (pv.status === 'empty') {
+    return '<p class="note">父馬・母馬を両方選ぶと、ここに配合理論の想定が表示されます（参考・未検証）。</p>';
+  }
+  if (pv.status === 'one-side') {
+    var other = pv.missingRole === 'sire' ? '父馬' : '母馬';
+    return '<p class="note">' + other + 'も選ぶと、ここに配合理論の想定が表示されます（参考・未検証）。</p>';
+  }
+  if (pv.status === 'name-only') {
+    return '<p class="note">名前だけの入力では血統が分からないため、配合理論は判定できません。父馬・母馬の両方をデータベースまたは自家生産馬から選んでください（参考・未検証）。</p>';
+  }
+  if (pv.status === 'missing') {
+    return '<p class="note">選んだ父馬・母馬が見つかりません。データベースが読み込めていないか、自家生産馬が削除された可能性があります。父馬・母馬を選び直してください。</p>';
+  }
+  var label = routeTheoryLabel(pv.sire, pv.dam);
+  var html = '<h4>配合理論の想定（保存前・参考・未検証）</h4>';
+  html += '<p class="meta">父 ' + esc(pv.sire.n || '') + ' × 母 ' + esc(pv.dam.n || '') + '</p>';
+  if (label && label.hits.length) {
+    html += '<p>成立しそうな理論（参考・未検証）：' + esc(label.hits.join('、')) + '</p>';
+  } else {
+    html += '<p>配合理論なし（参考・未検証）</p>';
+  }
+  if (label && label.dangerous) html += '<p class="note">危険な配合の条件に当てはまるように見えます（参考）。</p>';
+  html += matingTheorySummaryHtml(pv.theories);
+  return html;
+}
+/* 計画フォーム（作成・編集）のプレビュー表示を更新する。父馬・母馬の
+   選択が変わるたびに updatePlanDbStatus から呼ぶ。 */
+function updatePlanTheoryPreview() {
+  var box = $('plan-theory-preview');
+  if (!box) return;
+  var sire = resolveParentRef({ dbIndex: selectedDb.sire, ownId: selectedOwn.sire });
+  var dam = resolveParentRef({ dbIndex: selectedDb.dam, ownId: selectedOwn.dam });
+  var sireName = $('p-sire') ? $('p-sire').value : '';
+  var damName = $('p-dam') ? $('p-dam').value : '';
+  var sireHasRef = (selectedDb.sire !== null && selectedDb.sire !== undefined) || !!selectedOwn.sire;
+  var damHasRef = (selectedDb.dam !== null && selectedDb.dam !== undefined) || !!selectedOwn.dam;
+  box.innerHTML = matingTheoryPreviewHtml(matingTheoryPreview(sire, dam, sireName, damName, sireHasRef, damHasRef));
+}
+/* 子の血統・配合理論の確認の表示（折りたたみ・既定は閉じる）。 */
+function buildChildPedigreeHtml(sire, dam) {
+  var rows = buildChildPedigree(sire, dam);
+  if (!rows) return '';
+  var nameToIdx = stallionNameToIndex();
+  var html = '<details class="ref-details"><summary>子の血統・配合理論を見る（参考・未検証）</summary>';
+  html += '<p>子の父：' + esc(sire.n || '') + ' ／ 子の母：' + esc(dam.n || '') + '</p>';
+  html += '<h4>子の血統表（5代・参考）</h4><table><thead><tr><th>血統位置</th><th>祖先名</th><th>親系統</th><th>因子</th><th>DB</th></tr></thead><tbody>';
+  rows.forEach(function (r) {
+    var idx = (r.name && nameToIdx[r.name] !== undefined) ? nameToIdx[r.name] : null;
+    html += '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.name || '—') + '</td><td>' + esc(r.pa || '—') + '</td><td>' +
+      esc([r.f1, r.f2].filter(function (x) { return x; }).join('／') || '—') + '</td><td>' +
+      (idx !== null ? 'DBにあり <button type="button" data-stallion-idx="' + idx + '">詳細</button>' : '—') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<p class="note">祖先名がデータベース内の馬名と完全一致する場合は「DBにあり」と表示し、「詳細」でその馬の血統・詳細を見られます。</p>';
+  var th = checkMatingTheories(sire, dam);
+  html += '<h4>配合理論の確認（参考・未検証）</h4>';
+  html += matingTheorySummaryHtml(th);
   var crosses = findInbreeding(sire, dam);
   html += '<h4>インブリード（クロス・参考）</h4>';
   if (!crosses.length) {
@@ -2326,12 +2408,28 @@ els[role] = { name: input, status: status, list: list, chi: chiSel, factor: fact
 row.appendChild(field);
 });
 box.appendChild(row);
+/* この世代の配合理論のプレビュー（保存前）。父馬・母馬の欄の下に出す。
+   判定と表示は計画フォームのプレビューと同じ関数を使う。 */
+var previewDiv = document.createElement('div');
+previewDiv.className = 'theory-preview';
+previewDiv.setAttribute('role', 'status');
+box.appendChild(previewDiv);
+function refreshGenPreview() {
+var sire = resolveParentRef({ dbIndex: gen.sireDbIndex, ownId: gen.sireOwnId });
+var dam = resolveParentRef({ dbIndex: gen.damDbIndex, ownId: gen.damOwnId });
+var pv = matingTheoryPreview(sire, dam,
+els.sire.name ? els.sire.name.value : '',
+els.dam.name ? els.dam.name.value : '',
+(gen.sireDbIndex !== null && gen.sireDbIndex !== undefined) || !!gen.sireOwnId,
+(gen.damDbIndex !== null && gen.damDbIndex !== undefined) || !!gen.damOwnId);
+previewDiv.innerHTML = matingTheoryPreviewHtml(pv);
+}
 ['sire', 'dam'].forEach(function (role) {
 var ctx = suggestCtxFromEls(els[role], generationSuggestStore(p, gen), role);
 var e = els[role];
 updatePlanDbStatus(role, ctx);
 if (e.name) {
-e.name.addEventListener('input', function () { onPlanHorseNameInput(role, ctx); });
+e.name.addEventListener('input', function () { onPlanHorseNameInput(role, ctx); refreshGenPreview(); });
 e.name.addEventListener('focus', function () { renderPlanSuggestions(role, ctx); });
 e.name.addEventListener('blur', function () { setTimeout(function () { hidePlanSuggestions(role, ctx); }, 150); });
 e.name.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') hidePlanSuggestions(role, ctx); });
@@ -2348,6 +2446,7 @@ if (e[key]) e[key].addEventListener('input', function () { renderPlanSuggestions
 if (e[key]) e[key].addEventListener('change', function () { renderPlanSuggestions(role, ctx); });
 });
 });
+refreshGenPreview();
 return box;
 }
 
@@ -2587,4 +2686,4 @@ if (triple[1] && triple[1].ranges) RANKS = triple[1];
 if (triple[2] && Array.isArray(triple[2].horses)) STALLIONS = triple[2];
 });
 }
-loadData().then(function () { renderList(); renderPlans(); renderOwnHorses(); updateGrowthBar(); renderStallionSearchStatus(); fillChiOptions();});
+loadData().then(function () { renderList(); renderPlans(); renderOwnHorses(); updateGrowthBar(); renderStallionSearchStatus(); fillChiOptions(); updatePlanTheoryPreview();});
