@@ -145,7 +145,7 @@
       <p class="note">調教本数は、将来のスピード・スタミナ測定に使うかもしれない記録です。最適な本数は未確定です。入れなくても登録できます。</p>
       <fieldset class="ml-box">
         <legend>測定メモ（絞り込み用・任意）</legend>
-        <p class="note">1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れてください。調教本数と、変わった内容（コメント変化／スペースあり／ランク変化）を記録すると、判定結果に測定による絞り込み（参考・未検証）が出ます。数値は断定しません。</p>
+        <p class="note">1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れてください。調教本数と、変わった内容（コメント変化／スペースあり／ランク変化）を記録すると、判定結果に測定による絞り込み（参考・未検証）が出ます。対象（スピード／スタミナ）を選ぶと、その時点のSPランク／STランクから両方の絞り込みが出ます。スタミナ側はスピード側の到達率の考え方を当てはめたもの（参考・未検証）です。数値は断定しません。</p>
         <div class="row">
           <label>時期（解析日・週）
             <input id="ml-at" type="text" autocomplete="off" placeholder="例：2歳3月5週">
@@ -194,15 +194,23 @@
             </select>
           </label>
         </div>
-        <label>測定用コメント
-          <select id="ml-measure">
-            <option value="">未入力</option>
-            <option value="BC登録はまだ先（スペースなし）">BC登録はまだ先ですね（スペースなし）</option>
-            <option value="BC登録は　まだ先（スペースあり）">BC登録は　まだ先ですね（スペースあり）</option>
-            <option value="完成まであと一息">完成まであと一息でしょうか</option>
-            <option value="準備はできた">準備はできたようですね</option>
-          </select>
-        </label>
+        <div class="row">
+          <label>対象
+            <select id="ml-target">
+              <option value="スピード">スピード</option>
+              <option value="スタミナ">スタミナ</option>
+            </select>
+          </label>
+          <label>測定用コメント
+            <select id="ml-measure">
+              <option value="">未入力</option>
+              <option value="BC登録はまだ先（スペースなし）">BC登録はまだ先ですね（スペースなし）</option>
+              <option value="BC登録は　まだ先（スペースあり）">BC登録は　まだ先ですね（スペースあり）</option>
+              <option value="完成まであと一息">完成まであと一息でしょうか</option>
+              <option value="準備はできた">準備はできたようですね</option>
+            </select>
+          </label>
+        </div>
         <label>メモ
           <input id="ml-note" type="text" autocomplete="off" placeholder="例：EからDに変わった">
         </label>
