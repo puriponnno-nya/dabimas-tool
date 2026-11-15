@@ -246,6 +246,11 @@ function collectHtml(el) {
     indexHtml.indexOf('配合ルート図を見る') >= 0 &&
     indexHtml.indexOf('横にスクロールできる') >= 0);
 
+  // --- R14: ルート図の画像保存ボタン ---
+  check('R14', 'ルート図に画像保存ボタン（data-route-save）が出て、保存関数がある',
+    html1.indexOf('data-route-save') >= 0 && html1.indexOf('このルート図を画像で保存') >= 0 &&
+    typeof C.saveRouteDiagramImage === 'function' && typeof C.buildRouteDiagramCanvas === 'function');
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('HARNESS ERROR', e); process.exit(2); });

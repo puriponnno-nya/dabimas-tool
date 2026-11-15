@@ -2380,6 +2380,57 @@ function matingTheoryPreviewHtml(pv) {
 var PARTNER_RECO_LIMIT = 20;
 var PARTNER_RECO_LABELS = ['至高の配合', '奇跡の配合', '超完璧な配合', '完璧な配合', '見事な配合', '面白い配合', 'よくできた配合'];
 var partnerRecoCache = { key: '', result: null };
+/* おすすめ相手の絞り込み条件（計画フォーム・世代フォームで共通）。
+   dist は「この距離を走れる相手」の対象距離（m の数値文字列）。
+   factor／hibon／talent は部分一致、growth は完全一致で、候補（DBの馬）の
+   項目に効く。自家生産馬は距離・因子などのデータを持たないため、条件が
+   1つでも指定されている間は候補から外す（一覧の注記にも出す）。
+   絞り込みはおすすめ一覧にだけ効き、件数表示も絞り込み後の件数になる。 */
+var recoFilters = { dist: '', factor: '', growth: '', hibon: '', talent: '' };
+function recoFiltersActive(f) {
+  f = f || recoFilters;
+  return !!(String(f.dist || '') || String(f.factor || '').trim() ||
+    String(f.growth || '') || String(f.hibon || '').trim() || String(f.talent || '').trim());
+}
+/* 距離適性の文字列（例「1600m〜2500m」）を [下限, 上限] にする。読めなければ null。 */
+function parseDistRange(s) {
+  var m = String(s || '').match(/(\d+)\s*m?\s*[〜~\-ー]\s*(\d+)\s*m?/);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2])];
+}
+/* DBの馬 h が絞り込み条件 f に合うか（searchStallions と同じ照合の仕方）。 */
+function recoCandidateMatches(h, f) {
+  if (!h || !f) return true;
+  function norm(s) { return String(s || '').trim().toLowerCase(); }
+  if (f.dist) {
+    var r = parseDistRange(h.dist);
+    var d = Number(f.dist);
+    if (!r || !(d >= r[0] && d <= r[1])) return false;
+  }
+  if (norm(f.factor) && norm([h.f1, h.f2, h.f3].join(' ')).indexOf(norm(f.factor)) < 0) return false;
+  if (norm(f.growth) && norm(h.growth) !== norm(f.growth)) return false;
+  if (norm(f.hibon) && norm((h.hibon || '') + ' ' + (h.hk || '')).indexOf(norm(f.hibon)) < 0) return false;
+  if (norm(f.talent) && norm(h.talent).indexOf(norm(f.talent)) < 0) return false;
+  return true;
+}
+/* 因子の選択肢（データにあるものだけ）。 */
+function recoFactorOptions() {
+  var seen = {};
+  if (STALLIONS && Array.isArray(STALLIONS.horses)) {
+    STALLIONS.horses.forEach(function (h) {
+      [h.f1, h.f2, h.f3].forEach(function (x) { if (x) seen[x] = true; });
+    });
+  }
+  return Object.keys(seen).sort();
+}
+/* 成長の選択肢（データにあるものだけ）。 */
+function recoGrowthOptions() {
+  var seen = {};
+  if (STALLIONS && Array.isArray(STALLIONS.horses)) {
+    STALLIONS.horses.forEach(function (h) { if (h.growth) seen[h.growth] = true; });
+  }
+  return Object.keys(seen).sort();
+}
 /* 付いている理論のうち一番優先順が高いものの順位（0が最高）。
    プラスの理論が何も付いていなければ -1。 */
 function theoryBestRank(th) {
@@ -2415,11 +2466,17 @@ function theoryShortReasons(th) {
    返り値: {total, items}。total は理論が付く相手の総数、items は
    優先順に並べた上位 PARTNER_RECO_LIMIT 件。
    item: {kind: 'db'／'own', dbIndex, ownId, name, badge, rank, label,
-   reasons: [{label, reason}], dangerous}。 */
-function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey) {
-  if (!fixedHorse) return { total: 0, items: [] };
+   reasons: [{label, reason}], dangerous}。
+   filters（任意・既定は recoFilters）で DB候補を絞り込める。返り値の
+   total は絞り込み後の件数で、unfilteredTotal に絞り込み前の件数、
+   filtersActive に条件の有無が入る。絞り込み中は自家生産馬を外す。 */
+function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey, filters) {
+  if (!fixedHorse) return { total: 0, items: [], unfilteredTotal: 0, filtersActive: false };
+  filters = filters || recoFilters;
+  var fOn = recoFiltersActive(filters);
   var ownCount = (typeof ownHorses !== 'undefined' && Array.isArray(ownHorses)) ? ownHorses.length : 0;
-  var key = String(fixedKey || '') + '|' + fixedRole + '|' + String(fixedHorse.n || '') + '|own' + ownCount;
+  var key = String(fixedKey || '') + '|' + fixedRole + '|' + String(fixedHorse.n || '') + '|own' + ownCount +
+    '|f' + JSON.stringify(filters);
   if (partnerRecoCache.key === key && partnerRecoCache.result) return partnerRecoCache.result;
   var candidateRole = fixedRole === 'sire' ? 'dam' : 'sire';
   var found = [];
@@ -2452,27 +2509,77 @@ function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey) {
         '自家生産馬（' + o.sex + '・' + o.generation + '代目／' + ownHorseOriginLabel(o) + '）');
     });
   }
-  found.sort(function (a, b) {
+  var kept = found;
+  if (fOn) {
+    kept = found.filter(function (it) {
+      if (it.kind !== 'db') return false; /* 自家生産馬は距離・因子などのデータがないため、絞り込み中は外す */
+      return recoCandidateMatches(STALLIONS.horses[it.dbIndex], filters);
+    });
+  }
+  kept.sort(function (a, b) {
     if (a.rank !== b.rank) return a.rank - b.rank;
     if (a.reasons.length !== b.reasons.length) return b.reasons.length - a.reasons.length;
     if (a.name !== b.name) return a.name < b.name ? -1 : 1;
     if (a.kind !== b.kind) return a.kind === 'own' ? -1 : 1;
     return (a.dbIndex || 0) - (b.dbIndex || 0);
   });
-  var result = { total: found.length, items: found.slice(0, PARTNER_RECO_LIMIT) };
+  var result = { total: kept.length, items: kept.slice(0, PARTNER_RECO_LIMIT),
+    unfilteredTotal: found.length, filtersActive: fOn };
   partnerRecoCache = { key: key, result: result };
   return result;
+}
+/* おすすめの絞り込み条件の入力欄（おすすめ一覧の中に置く）。
+   値は共通の recoFilters から取り、変えたら onRefresh で一覧を出し直す。 */
+function recoFilterControlsHtml() {
+  var f = recoFilters;
+  var distOpts = ['', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000'];
+  var html = '<details class="reco-filter"' + (recoFiltersActive(f) ? ' open' : '') + '><summary>おすすめを絞り込む（距離・因子・成長・非凡・天性）</summary>';
+  html += '<div class="reco-filter-grid">';
+  html += '<label>距離（この距離を走れる相手）<select data-reco-filter="dist">' +
+    distOpts.map(function (d) {
+      return '<option value="' + d + '"' + (String(f.dist) === d ? ' selected' : '') + '>' + (d ? d + 'm' : '指定なし') + '</option>';
+    }).join('') + '</select></label>';
+  html += '<label>因子<select data-reco-filter="factor"><option value="">指定なし</option>' +
+    recoFactorOptions().map(function (x) {
+      return '<option value="' + esc(x) + '"' + (f.factor === x ? ' selected' : '') + '>' + esc(x) + '</option>';
+    }).join('') + '</select></label>';
+  html += '<label>成長<select data-reco-filter="growth"><option value="">指定なし</option>' +
+    recoGrowthOptions().map(function (x) {
+      return '<option value="' + esc(x) + '"' + (f.growth === x ? ' selected' : '') + '>' + esc(x) + '</option>';
+    }).join('') + '</select></label>';
+  html += '<label>非凡（部分一致）<input type="text" data-reco-filter="hibon" value="' + esc(f.hibon || '') + '" placeholder="例：鉄情不羈"></label>';
+  html += '<label>天性（部分一致）<input type="text" data-reco-filter="talent" value="' + esc(f.talent || '') + '" placeholder="例：飛燕"></label>';
+  html += '</div><p class="note">絞り込みはおすすめ一覧にだけ効きます。条件を変えると件数も絞り込み後のものになります。絞り込み中は、自家生産馬は候補から外れます（距離・因子などのデータを持たないため）。</p></details>';
+  return html;
+}
+/* 絞り込み条件の入力に変更処理をつなぐ。変えたら recoFilters を更新して
+   onRefresh（プレビューの出し直し）を呼ぶ。テキスト欄は change（確定時）
+   で拾い、入力中のフォーカスが外れないようにする。 */
+function attachRecoFilterControls(container, onRefresh) {
+  if (!container || !container.querySelectorAll || !onRefresh) return;
+  container.querySelectorAll('[data-reco-filter]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      var k = el.getAttribute('data-reco-filter');
+      if (k && recoFilters.hasOwnProperty(k)) recoFilters[k] = String(el.value || '').trim();
+      onRefresh();
+    });
+  });
 }
 /* おすすめ一覧のHTML。候補はボタンになっていて、押すと相手として
    選ばれる（attachPartnerRecoButtons で実際の選択処理をつなぐ）。 */
 function partnerRecommendationsHtml(recos, missingRole) {
   var roleLabel = missingRole === 'sire' ? '父馬' : '母馬';
   var html = '<div class="partner-reco"><h4>おすすめの' + roleLabel + '（参考・未検証）</h4>';
+  html += recoFilterControlsHtml();
   if (!recos || !recos.total) {
-    html += '<p class="note">理論が付く相手は見つかりませんでした（参考・未検証）。</p></div>';
+    html += recos && recos.filtersActive
+      ? '<p class="note">この絞り込み条件では、理論が付く相手は見つかりませんでした（絞り込み前は' + recos.unfilteredTotal + '件）。条件をゆるめてみてください（参考・未検証）。</p></div>'
+      : '<p class="note">理論が付く相手は見つかりませんでした（参考・未検証）。</p></div>';
     return html;
   }
-  html += '<p class="note">理論が付く相手が' + recos.total + '件見つかりました（上位' + recos.items.length + '件を表示）。タップすると' + roleLabel + 'に選ばれます。判定はユーザー検証による推定で、配合の効果を断定するものではありません。</p>';
+  html += '<p class="note">理論が付く相手が' + recos.total + '件見つかりました（上位' + recos.items.length + '件を表示）。' +
+    (recos.filtersActive ? '絞り込み中の件数です（絞り込み前は' + recos.unfilteredTotal + '件）。' : '') +
+    'タップすると' + roleLabel + 'に選ばれます。判定はユーザー検証による推定で、配合の効果を断定するものではありません。</p>';
   html += '<ul class="reco-list">';
   recos.items.forEach(function (it) {
     html += '<li><button type="button" class="reco-btn" data-reco-kind="' + it.kind + '"' +
@@ -2502,7 +2609,7 @@ function attachPartnerRecoButtons(container, onPick) {
    おすすめ一覧を box の末尾に足す共通処理。keys は {sireKey, damKey}
    （選んだ馬の識別子 'db:番号'／'own:ID'、未選択は ''）。
    onPick(missingRole, item) が候補を選んだ時の処理。 */
-function appendPartnerRecommendations(box, pv, keys, onPick) {
+function appendPartnerRecommendations(box, pv, keys, onPick, onRefresh) {
   if (!box || !pv || pv.status !== 'one-side') return;
   var fixedRole = pv.missingRole === 'sire' ? 'dam' : 'sire';
   var fixedHorse = fixedRole === 'sire' ? pv.sire : pv.dam;
@@ -2511,6 +2618,7 @@ function appendPartnerRecommendations(box, pv, keys, onPick) {
   var recos = findPartnerRecommendations(fixedHorse, fixedRole, fixedKey);
   box.innerHTML += partnerRecommendationsHtml(recos, pv.missingRole);
   attachPartnerRecoButtons(box, function (item) { onPick(pv.missingRole, item); });
+  attachRecoFilterControls(box, onRefresh);
 }
 function updatePlanTheoryPreview() {
   var box = $('plan-theory-preview');
@@ -2530,7 +2638,7 @@ function updatePlanTheoryPreview() {
   }, function (missingRole, item) {
     if (item.kind === 'db') choosePlanSuggestion(missingRole, item.dbIndex);
     else chooseOwnHorseForPlan(missingRole, item.ownId);
-  });
+  }, function () { updatePlanTheoryPreview(); });
 }
 /* 子の血統・配合理論の確認の表示（折りたたみ・既定は閉じる）。 */
 function buildChildPedigreeHtml(sire, dam) {
@@ -2690,6 +2798,7 @@ function buildRouteDiagramHtml(plan) {
   if (!d) return '';
   var html = '<details class="route-diagram" open><summary>配合ルート図を見る（参考・未検証）</summary>';
   html += '<p class="note">左が最終の子、右へ行くほど前の世代です。青い箱が種牡馬、ピンクの箱が繁殖牝馬です。矢印（←）は親から子へのつながりです。配合理論の判定はユーザー攻略記事による推定・共有情報で、すべて参考・未検証です。配合の効果を断定する表示はしません。</p>';
+  html += '<p><button type="button" class="route-save-btn" data-route-save="' + esc(plan.id) + '">このルート図を画像で保存</button></p>';
   html += '<div class="route-scroll"><div class="route-diagram-inner">';
   d.columns.forEach(function (col, ci) {
     if (ci > 0) html += '<div class="route-arrow" aria-hidden="true">←</div>';
@@ -2896,10 +3005,301 @@ function buildMergedRouteDiagramHtml(plan) {
   var d = buildMergedRouteDiagram(plan);
   if (!d || !d.root) return '';
   var html = '<details class="route-diagram" open><summary>配合ルート図（複数ルート統合）を見る（参考・未検証）</summary>';
+  html += '<p><button type="button" class="route-save-btn" data-route-save="' + esc(plan.id) + '">このルート図を画像で保存</button></p>';
   html += '<p class="note">左が最終の子、右へ行くほど前の世代です。上の枝が父方のルート、下の枝が母方のルートで、最終の子のところで合流します。青い箱が種牡馬、ピンクの箱が繁殖牝馬です。矢印（←）は親から子へのつながりです。各配合の箱には由来の計画名と第何世代の子かを付けています（由来が記録されていない自分の馬は「由来不明」と表示し、枝は出しません）。配合理論の判定はユーザー攻略記事による推定・共有情報で、すべて参考・未検証です。配合の効果を断定する表示はしません。</p>';
   html += '<div class="route-scroll merge-scroll"><div class="merge-tree">' + mergedMatingHtml(d.root) + '</div></div></details>';
   return html;
 }
+/* ---------- 配合ルート図の画像保存 ---------- */
+/* 表示中のルート図（単一ルート／複数ルート統合）を、外部ライブラリなしで
+   Canvasに描き直してPNG画像として保存する。描く内容は buildRouteDiagram／
+   buildMergedRouteDiagram のデータそのもので、計画名・馬名・配合理論の
+   ラベルが読める状態で入る。配色は画面のルート図（styles.css）に合わせる。
+   横に長い図でも全体が1枚に入るよう、図の大きさに合わせてキャンバスを
+   作る（2倍解像度で描くので文字も読みやすい）。 */
+var ROUTE_IMG = {
+  boxW: 200, pad: 16, arrowW: 34, gap: 8, scale: 2,
+  bg: '#050b18', titleColor: '#ffd34d', noteColor: '#aab8dd', arrowColor: '#ff8f8f',
+  colBorder: '#2c3f7d', colBg: '#121830',
+  theoryBg: '#18224a', theoryBgMissing: '#1a1a2e',
+  theoryText: '#d6e6ff', theoryTextMissing: '#aab8dd',
+  colors: {
+    sire: { bg: '#173a7a', border: '#4d7cfe', text: '#dbe8ff' },
+    dam: { bg: '#5e1f3d', border: '#ff8fb0', text: '#ffe3ec' },
+    child: { bg: '#332a05', border: '#ffd34d', text: '#ffe9a8' },
+    missing: { bg: '#0e1330', border: '#8a7414', text: '#aab8dd' }
+  },
+  fontRole: '12px sans-serif', fontName: 'bold 15px sans-serif',
+  fontNote: '12px sans-serif', fontTheory: '13px sans-serif',
+  fontHead: 'bold 14px sans-serif', fontTitle: 'bold 18px sans-serif'
+};
+function routeImgWrap(ctx, text, maxW) {
+  var lines = [];
+  String(text || '').split('\n').forEach(function (seg) {
+    var cur = '';
+    seg.split('').forEach(function (ch) {
+      var t = cur + ch;
+      if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = ch; }
+      else cur = t;
+    });
+    lines.push(cur);
+  });
+  return lines;
+}
+function routeImgRoundRect(ctx, x, y, w, h, r, fill, stroke, dashed) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.setLineDash(dashed ? [5, 4] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+/* 箱1つの描画サイズと描画関数を返す。box: {kind, role, name, note}。
+   kind は色の種類（sire／dam／child／missing）に寄せてから渡す。 */
+function routeImgBox(ctx, box) {
+  var W = ROUTE_IMG.boxW, inner = W - 16;
+  ctx.font = ROUTE_IMG.fontName;
+  var nameLines = routeImgWrap(ctx, box.name || '—', inner);
+  ctx.font = ROUTE_IMG.fontNote;
+  var noteLines = box.note ? routeImgWrap(ctx, box.note, inner) : [];
+  var h = 10 + 15 + nameLines.length * 20 + (noteLines.length ? 4 + noteLines.length * 15 : 0) + 10;
+  return {
+    w: W, h: h,
+    draw: function (c, x, y) {
+      var col = ROUTE_IMG.colors[box.kind] || ROUTE_IMG.colors.missing;
+      routeImgRoundRect(c, x, y, W, h, 14, col.bg, col.border, box.kind === 'missing');
+      c.fillStyle = col.text;
+      c.textAlign = 'center';
+      var cy = y + 10;
+      c.font = ROUTE_IMG.fontRole;
+      c.fillText(box.role || '', x + W / 2, cy + 12);
+      cy += 15;
+      c.font = ROUTE_IMG.fontName;
+      nameLines.forEach(function (ln) { cy += 20; c.fillText(ln, x + W / 2, cy - 5); });
+      if (noteLines.length) {
+        cy += 4;
+        c.font = ROUTE_IMG.fontNote;
+        noteLines.forEach(function (ln) { cy += 15; c.fillText(ln, x + W / 2, cy - 4); });
+      }
+      c.textAlign = 'left';
+    }
+  };
+}
+/* 配合理論の表示ブロック（箱の下に出る帯）。 */
+function routeImgTheory(ctx, text, missing) {
+  var W = ROUTE_IMG.boxW, inner = W - 16;
+  ctx.font = ROUTE_IMG.fontTheory;
+  var lines = routeImgWrap(ctx, text, inner);
+  var h = 12 + lines.length * 18;
+  return {
+    w: W, h: h,
+    draw: function (c, x, y) {
+      routeImgRoundRect(c, x, y, W, h, 12, missing ? ROUTE_IMG.theoryBgMissing : ROUTE_IMG.theoryBg, null, false);
+      c.fillStyle = missing ? ROUTE_IMG.theoryTextMissing : ROUTE_IMG.theoryText;
+      c.font = ROUTE_IMG.fontTheory;
+      c.textAlign = 'center';
+      var cy = y + 6;
+      lines.forEach(function (ln) { cy += 18; c.fillText(ln, x + W / 2, cy - 5); });
+      c.textAlign = 'left';
+    }
+  };
+}
+function routeImgArrow(c, x, y) {
+  c.fillStyle = ROUTE_IMG.arrowColor;
+  c.font = '22px sans-serif';
+  c.textAlign = 'center';
+  c.fillText('←', x + ROUTE_IMG.arrowW / 2, y + 8);
+  c.textAlign = 'left';
+}
+/* 単一ルート図（buildRouteDiagram の columns）のレイアウト。 */
+function routeImgSingleLayout(ctx, d) {
+  var cols = d.columns.map(function (col) {
+    var parts = [];
+    var h = 20; /* 見出し */
+    col.boxes.forEach(function (b) {
+      var kind = b.kind === 'sire' ? 'sire' : b.kind === 'dam' ? 'dam' : b.kind === 'child' ? 'child' : 'missing';
+      var role = b.role === 'sire' ? '父（種牡馬）' : b.role === 'dam' ? '母（繁殖牝馬）' : '子';
+      var bx = routeImgBox(ctx, { kind: kind, role: role, name: b.name || '—', note: b.note || '' });
+      parts.push(bx);
+      h += (parts.length > 1 ? ROUTE_IMG.gap : 0) + bx.h;
+    });
+    var theory = null;
+    if (col.mating) {
+      var m = col.mating, text, missing = false;
+      if (m.status === 'ok') {
+        text = '第' + m.genNo + '世代：' + m.label + '（参考・未検証）' +
+          (m.dangerous ? '／危険な配合の条件に当てはまるように見えます（参考）' : '');
+      } else if (m.status === 'missing') {
+        text = '第' + m.genNo + '世代：親が見つかりません — この世代の配合理論は確認できません（計画自体は残っています）';
+        missing = true;
+      } else {
+        text = '第' + m.genNo + '世代：父・母をDBまたは自家生産馬から選ぶと配合理論を確認できます';
+        missing = true;
+      }
+      theory = routeImgTheory(ctx, text, missing);
+      h += ROUTE_IMG.gap + theory.h;
+    }
+    return { title: col.title, parts: parts, theory: theory, w: ROUTE_IMG.boxW, h: h };
+  });
+  var totalH = 0;
+  cols.forEach(function (c) { if (c.h > totalH) totalH = c.h; });
+  var totalW = cols.length * ROUTE_IMG.boxW + (cols.length - 1) * ROUTE_IMG.arrowW;
+  return {
+    w: totalW, h: totalH,
+    draw: function (c, x, y) {
+      var cx = x;
+      cols.forEach(function (col, ci) {
+        if (ci > 0) routeImgArrow(c, cx - ROUTE_IMG.arrowW, y + totalH / 2);
+        c.fillStyle = ROUTE_IMG.titleColor;
+        c.font = ROUTE_IMG.fontHead;
+        c.textAlign = 'center';
+        c.fillText(col.title, cx + ROUTE_IMG.boxW / 2, y + 15);
+        c.textAlign = 'left';
+        var cy = y + 20;
+        col.parts.forEach(function (bx, bi) {
+          if (bi > 0) cy += ROUTE_IMG.gap;
+          bx.draw(c, cx, cy);
+          cy += bx.h;
+        });
+        if (col.theory) { cy += ROUTE_IMG.gap; col.theory.draw(c, cx, cy); }
+        cx += ROUTE_IMG.boxW + ROUTE_IMG.arrowW;
+      });
+    }
+  };
+}
+/* 統合図の馬の箱の色（mergedHorseBoxHtml と同じ振り分け）。 */
+function routeImgMergedKind(h) {
+  if (h.kind === 'sire') return 'sire';
+  if (h.kind === 'dam') return 'dam';
+  if (h.kind === 'own') return h.sex === '牝' ? 'dam' : 'sire';
+  return 'missing';
+}
+function routeImgMergedLeaf(ctx, h) {
+  return routeImgBox(ctx, {
+    kind: routeImgMergedKind(h),
+    role: h.role === 'sire' ? '父（種牡馬）' : '母（繁殖牝馬）',
+    name: h.name || '—', note: h.note || ''
+  });
+}
+function routeImgMergedBranch(ctx, h) {
+  if (h && h.mating) return routeImgMergedMating(ctx, h.mating);
+  return routeImgMergedLeaf(ctx, h);
+}
+function routeImgMergedMating(ctx, m) {
+  var childBox = routeImgBox(ctx, {
+    kind: 'child', role: '子', name: m.childName,
+    note: '「' + m.planName + '」第' + m.genNo + '世代の子・' + (m.childSex || '不明')
+  });
+  var th = m.theory, text, missing = false;
+  if (th.status === 'ok') {
+    text = '「' + m.planName + '」第' + m.genNo + '世代：' + th.label + '（参考・未検証）' +
+      (th.dangerous ? '／危険な配合の条件に当てはまるように見えます（参考）' : '');
+  } else if (th.status === 'missing') {
+    text = '「' + m.planName + '」第' + m.genNo + '世代：親が見つかりません — この世代の配合理論は確認できません（計画自体は残っています）';
+    missing = true;
+  } else {
+    text = '「' + m.planName + '」第' + m.genNo + '世代：父・母をDBまたは自家生産馬から選ぶと配合理論を確認できます';
+    missing = true;
+  }
+  var theory = routeImgTheory(ctx, text, missing);
+  var sireB = routeImgMergedBranch(ctx, m.sire);
+  var damB = routeImgMergedBranch(ctx, m.dam);
+  var childColH = childBox.h + ROUTE_IMG.gap + theory.h;
+  var parentsH = sireB.h + ROUTE_IMG.gap + damB.h;
+  var H = Math.max(childColH, parentsH);
+  var W = ROUTE_IMG.boxW + ROUTE_IMG.arrowW + Math.max(sireB.w, damB.w);
+  return {
+    w: W, h: H,
+    draw: function (c, x, y) {
+      var cy = y + (H - childColH) / 2;
+      childBox.draw(c, x, cy);
+      theory.draw(c, x, cy + childBox.h + ROUTE_IMG.gap);
+      routeImgArrow(c, x + ROUTE_IMG.boxW, y + H / 2);
+      var px = x + ROUTE_IMG.boxW + ROUTE_IMG.arrowW;
+      var py = y + (H - parentsH) / 2;
+      sireB.draw(c, px, py);
+      damB.draw(c, px, py + sireB.h + ROUTE_IMG.gap);
+    }
+  };
+}
+/* ルート図全体をCanvasにする。作れなければ null。 */
+function buildRouteDiagramCanvas(plan) {
+  var layout = null, title = '', note = '';
+  var scratch = document.createElement('canvas');
+  var sctx = scratch.getContext('2d');
+  if (!sctx) return null;
+  var md = null;
+  if (planHasCrossRouteAncestry(plan)) md = buildMergedRouteDiagram(plan);
+  if (md && md.root) {
+    layout = routeImgMergedMating(sctx, md.root);
+    title = String(plan.name || '') + ' の配合ルート図（複数ルート統合・参考・未検証）';
+    note = '左が最終の子、右へ行くほど前の世代です。上の枝が父方、下の枝が母方のルートです。青い箱が種牡馬、ピンクの箱が繁殖牝馬です。配合理論はユーザー検証による推定で、配合の効果を断定するものではありません。';
+  } else {
+    var sd = buildRouteDiagram(plan);
+    if (!sd) return null;
+    layout = routeImgSingleLayout(sctx, sd);
+    title = String(plan.name || '') + ' の配合ルート図（参考・未検証）';
+    note = '左が最終の子、右へ行くほど前の世代です。青い箱が種牡馬、ピンクの箱が繁殖牝馬です。配合理論はユーザー検証による推定で、配合の効果を断定するものではありません。';
+  }
+  var W = layout.w + ROUTE_IMG.pad * 2;
+  sctx.font = ROUTE_IMG.fontNote;
+  var noteLines = routeImgWrap(sctx, note, W - ROUTE_IMG.pad * 2);
+  var titleH = 26 + noteLines.length * 16 + 10;
+  var H = ROUTE_IMG.pad + titleH + layout.h + ROUTE_IMG.pad;
+  var canvas = document.createElement('canvas');
+  canvas.width = W * ROUTE_IMG.scale;
+  canvas.height = H * ROUTE_IMG.scale;
+  var ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.scale(ROUTE_IMG.scale, ROUTE_IMG.scale);
+  ctx.fillStyle = ROUTE_IMG.bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = ROUTE_IMG.titleColor;
+  ctx.font = ROUTE_IMG.fontTitle;
+  ctx.fillText(title, ROUTE_IMG.pad, ROUTE_IMG.pad + 20);
+  ctx.fillStyle = ROUTE_IMG.noteColor;
+  ctx.font = ROUTE_IMG.fontNote;
+  var ny = ROUTE_IMG.pad + 26;
+  noteLines.forEach(function (ln) { ny += 16; ctx.fillText(ln, ROUTE_IMG.pad, ny - 4); });
+  layout.draw(ctx, ROUTE_IMG.pad, ROUTE_IMG.pad + titleH);
+  return canvas;
+}
+/* ルート図をPNGでダウンロードさせる（iPhone Safariでは共有シートや
+   「ファイルに保存」につながる通常のダウンロード動作になる）。 */
+function saveRouteDiagramImage(plan) {
+  var canvas = null;
+  try { canvas = buildRouteDiagramCanvas(plan); } catch (e) { canvas = null; }
+  if (!canvas) { window.alert('ルート図の画像を作れませんでした。'); return; }
+  var fname = '配合ルート図-' + String(plan.name || '計画').replace(/[\\\/:*?"<>|]/g, '_') + '.png';
+  function download(url, revoke) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      if (a.parentNode) a.parentNode.removeChild(a);
+      if (revoke && window.URL && URL.revokeObjectURL) URL.revokeObjectURL(url);
+    }, 500);
+  }
+  if (canvas.toBlob) {
+    canvas.toBlob(function (blob) {
+      if (blob && window.URL && URL.createObjectURL) download(URL.createObjectURL(blob), true);
+      else download(canvas.toDataURL('image/png'), false);
+    });
+  } else {
+    download(canvas.toDataURL('image/png'), false);
+  }
+}
+
 function loadIntoForm(r) {
 $('edit-id').value = r.id;
 $('f-name').value = r.name;
@@ -3179,6 +3579,8 @@ li.innerHTML = '<p class="name">' + esc(p.name) + '</p>'
    計画カードの上部に出す。折りたたみで、既定は開く。 */
 var routeDiv = document.createElement('div');
 routeDiv.innerHTML = buildRouteDiagramHtml(p);
+var routeSaveBtn = routeDiv.querySelector('[data-route-save]');
+if (routeSaveBtn) routeSaveBtn.addEventListener('click', function () { saveRouteDiagramImage(p); });
 li.appendChild(routeDiv);
 var gens = planGenerations(p);
 gens.forEach(function (gen, gi) {
@@ -3375,7 +3777,7 @@ damKey: gen.damOwnId ? 'own:' + gen.damOwnId : (gen.damDbIndex !== null && gen.d
 var ctx = suggestCtxFromEls(els[missingRole], generationSuggestStore(p, gen), missingRole);
 if (item.kind === 'db') chooseSuggestionOf(ctx, item.dbIndex);
 else chooseOwnSuggestionOf(ctx, item.ownId);
-});
+}, function () { refreshGenPreview(); });
 }
 ['sire', 'dam'].forEach(function (role) {
 var ctx = suggestCtxFromEls(els[role], generationSuggestStore(p, gen), role);

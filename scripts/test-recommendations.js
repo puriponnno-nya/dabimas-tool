@@ -160,6 +160,52 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     !previewBoth.includes('おすすめの母馬') &&
     previewBoth.includes('配合理論の想定（保存前・参考・未検証）'));
 
+  // --- 絞り込み（改善1） ---
+  // 先頭の候補が因子・距離を持つとは限らないので、両方を持つ候補から取る
+  const topItem = recos.items.find((it) => {
+    if (it.kind !== 'db') return false;
+    const h = C.STALLIONS.horses[it.dbIndex];
+    return [h.f1, h.f2, h.f3].filter(Boolean).length > 0 && C.parseDistRange(h.dist);
+  });
+  const topDbHorse = C.STALLIONS.horses[topItem.dbIndex];
+  const topFactor = [topDbHorse.f1, topDbHorse.f2, topDbHorse.f3].filter(Boolean)[0];
+  const fFactor = { dist: '', factor: topFactor, growth: '', hibon: '', talent: '' };
+  const recosF = C.findPartnerRecommendations(gilded, 'sire', 'db:' + idxGilded, fFactor);
+  check('R13', '因子で絞り込むと、候補はすべてその因子を持ち、件数は絞り込み後のものになる',
+    recosF.filtersActive === true && recosF.unfilteredTotal === recos.total &&
+    recosF.total > 0 && recosF.total <= recos.total &&
+    recosF.items.every((it) => it.kind === 'db' &&
+      [C.STALLIONS.horses[it.dbIndex].f1, C.STALLIONS.horses[it.dbIndex].f2, C.STALLIONS.horses[it.dbIndex].f3].includes(topFactor)),
+    `total=${recosF.total} unfiltered=${recosF.unfilteredTotal} factor=${topFactor}`);
+  const topRange = C.parseDistRange(topDbHorse.dist);
+  const fDist = { dist: String(topRange[0]), factor: '', growth: '', hibon: '', talent: '' };
+  const recosD = C.findPartnerRecommendations(gilded, 'sire', 'db:' + idxGilded, fDist);
+  check('R14', '距離で絞り込むと、候補の距離適性はすべて指定距離を含む',
+    recosD.total > 0 &&
+    recosD.items.every((it) => {
+      const r = C.parseDistRange(C.STALLIONS.horses[it.dbIndex].dist);
+      return r && topRange[0] >= r[0] && topRange[0] <= r[1];
+    }), `total=${recosD.total} dist=${topRange[0]}`);
+  check('R15', '成長・非凡・天性の照合（recoCandidateMatches）',
+    C.recoCandidateMatches(topDbHorse, { dist: '', factor: '', growth: topDbHorse.growth, hibon: '', talent: '' }) === !!topDbHorse.growth &&
+    C.recoCandidateMatches(topDbHorse, { dist: '', factor: '', growth: '', hibon: '存在しない非凡XYZ', talent: '' }) === false &&
+    C.recoCandidateMatches(topDbHorse, { dist: '9999', factor: '', growth: '', hibon: '', talent: '' }) === false &&
+    C.recoCandidateMatches(topDbHorse, { dist: '', factor: '', growth: '', hibon: '', talent: '' }) === true);
+  C.ownHorses = [fakeOwn];
+  const recosFOwn = C.findPartnerRecommendations(gilded, 'sire', 'db:' + idxGilded, fFactor);
+  check('R16', '絞り込み中は自家生産馬が候補から外れる',
+    recosFOwn.items.every((it) => it.kind === 'db'),
+    `items=${recosFOwn.items.length}`);
+  C.ownHorses = [];
+  const htmlF = C.partnerRecommendationsHtml(recosF, 'dam');
+  check('R17', '絞り込み中のおすすめ表示に、絞り込み後の件数と条件入力が出る',
+    htmlF.includes('data-reco-filter="dist"') && htmlF.includes('data-reco-filter="factor"') &&
+    htmlF.includes('理論が付く相手が' + recosF.total + '件見つかりました') &&
+    htmlF.includes('絞り込み中の件数です（絞り込み前は' + recos.total + '件）'));
+  const recosF2 = C.findPartnerRecommendations(gilded, 'sire', 'db:' + idxGilded, fFactor);
+  const recosF3 = C.findPartnerRecommendations(gilded, 'sire', 'db:' + idxGilded, fFactor);
+  check('R18', '絞り込み条件が同じ間はキャッシュを使い回す', recosF3 === recosF2);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

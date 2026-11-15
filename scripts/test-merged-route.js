@@ -429,6 +429,10 @@ function treeMatings(m, out) {
     Array.isArray(danchi.forms) && danchi.forms.indexOf('ダンチヒ') >= 0 && danchi.forms.indexOf('ダンチヒ1992') >= 0,
     JSON.stringify(danchi));
 
+  // --- M21: 統合図にも画像保存ボタンが出る ---
+  check('M21', '複数ルート統合図に画像保存ボタン（data-route-save）が出る',
+    htmlE.indexOf('data-route-save') >= 0 && htmlE.indexOf('このルート図を画像で保存') >= 0);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('HARNESS ERROR', e); process.exit(2); });

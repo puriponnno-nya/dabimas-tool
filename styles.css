@@ -227,3 +227,15 @@ footer { margin-top: 26px; }
 .reco-btn .reco-theory { display: block; font-size: 13px; color: #ffd34d; margin-top: 2px; }
 .reco-btn .reco-reason { display: block; font-size: 12px; color: #c9d4f5; }
 .reco-btn .reco-warn { display: block; font-size: 12px; color: #ff9d9d; }
+.reco-filter { margin: 6px 0 8px; border: 1px solid #2c3f7d; border-radius: 12px; padding: 6px 10px; background: #0c1a33; }
+.reco-filter summary { cursor: pointer; font-size: 13px; color: #c9d4f5; min-height: 32px; display: flex; align-items: center; }
+.reco-filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.reco-filter-grid label { display: block; font-size: 12px; color: #aab8dd; }
+.reco-filter-grid select, .reco-filter-grid input {
+  display: block; width: 100%; margin-top: 4px; min-height: 40px;
+  background: #050b18; color: #eef5ff; border: 1px solid #2c3f7d; border-radius: 10px; padding: 6px 8px; font-size: 14px;
+}
+.route-save-btn {
+  min-height: 44px; padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  background: #173a7a; color: #dbe8ff; border: 1px solid #4d7cfe; font-size: 14px; font-weight: bold;
+}
