@@ -81,8 +81,9 @@ function notesContain(nw, text) {
   await sleep(100); // loadData() の fetch 完了を待つ
   const C = sandbox;
 
-  check('N00', 'ranks.json v9 と staminaDart が読み込まれている',
-    C.RANKS && C.RANKS.version === 9 && !!(C.RANKS.measureNarrowing && C.RANKS.measureNarrowing.staminaDart) && !C.RANKS.measureNarrowing.staminaNote,
+  check('N00', 'ranks.json v10 と staminaDart・speedCount が読み込まれている',
+    C.RANKS && C.RANKS.version === 10 && !!(C.RANKS.measureNarrowing && C.RANKS.measureNarrowing.staminaDart) && !C.RANKS.measureNarrowing.staminaNote &&
+    !!(C.RANKS.speedCount && C.RANKS.speedCount.rates && C.RANKS.speedCount.rates['2'][0] === 60 && C.RANKS.speedCount.rates['2'][1] === 70),
     'version=' + (C.RANKS && C.RANKS.version));
 
   // N01: T29相当（対象なし旧形式2件、SPとして扱う）
@@ -230,6 +231,96 @@ function notesContain(nw, text) {
   check('N18', 'trainingType ダート一杯は可', vr([{ target: 'スタミナ', trainingType: 'ダート一杯', stage: '入厩後' }]) === true);
   check('N18b', 'trainingType の不正値は不可', vr([{ trainingType: '変な値', stage: '入厩後' }]) === false);
   check('N18c', 'trainingType なし旧形式は可', vr([{ stage: '入厩後', measure: '完成まであと一息' }]) === true);
+
+  // N19: スピード本数測定（初期B・芝一杯3本でA→初期SP97、メモリ2で最大SP候補139〜161）
+  est = C.estimate(rec({ growthNum: 2, measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'B' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 3, spRank: 'A' },
+  ] }));
+  check('N19', '本数測定で初期SP97・最大SP候補139〜161',
+    !!est.narrowSpCount && est.narrowSpCount.method === 'count' && est.narrowSpCount.initial === 97 && est.narrowSpCount.count === 3 &&
+    eqRange(est.narrowSpCount.range, 139, 161),
+    JSON.stringify(est.narrowSpCount));
+  check('N19b', '本数測定の端数未確認の注記', !!est.narrowSpCount && est.narrowSpCount.notes.join('\n').indexOf('端数処理は未確認') >= 0);
+
+  // N20: 初期E・芝一杯6本でD→初期SP49
+  est = C.estimate(rec({ growthNum: 2, measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'E' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 6, spRank: 'D' },
+  ] }));
+  check('N20', '本数測定で初期SP49・最大SP候補71〜81',
+    !!est.narrowSpCount && est.narrowSpCount.initial === 49 && eqRange(est.narrowSpCount.range, 71, 81),
+    JSON.stringify(est.narrowSpCount));
+
+  // N21: 最初からAは本数測定が使えない
+  est = C.estimate(rec({ measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'A' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 3, spRank: 'A' },
+  ] }));
+  check('N21', '最初からAは unusable で範囲なし',
+    !!est.narrowSpCount && est.narrowSpCount.unusable === true && est.narrowSpCount.range === null &&
+    est.narrowSpCount.notes.join('\n').indexOf('使えません') >= 0,
+    JSON.stringify(est.narrowSpCount));
+
+  // N22: 芝一杯以外の調教が混ざると精密測定にならない注記（初期値は計算する）
+  est = C.estimate(rec({ growthNum: 2, measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'B' },
+    { target: 'スピード', trainingType: 'その他', stage: '入厩後', trainingCount: 1, spRank: 'B' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 3, spRank: 'A' },
+  ] }));
+  check('N22', '混ざり注記つきで初期SP97',
+    !!est.narrowSpCount && est.narrowSpCount.mixed === true && est.narrowSpCount.initial === 97 &&
+    est.narrowSpCount.notes.join('\n').indexOf('精密な本数測定にはなりません') >= 0,
+    JSON.stringify(est.narrowSpCount));
+
+  // N23: コメント式との重なり（combined）
+  est = C.estimate(rec({ growthNum: 2, measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'B' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 10, spRank: 'A' },
+    { target: 'スピード', stage: '入厩後', trainingCount: 29, spRank: 'A', measure: '完成まであと一息' },
+  ] }));
+  check('N23', '本数測定129〜150とコメント式の重なり129〜150',
+    !!est.narrowSpCount && est.narrowSpCount.initial === 90 && eqRange(est.narrowSpCount.range, 129, 150) &&
+    !!est.narrowSp && eqRange(est.narrowSp.range, 100, null) &&
+    eqRange(est.narrowSpCount.combined, 129, 150) && est.narrowSpCount.combinedConflict === false,
+    JSON.stringify({ c: est.narrowSpCount, m: est.narrowSp && est.narrowSp.range }));
+
+  // N23b: コメント式と食い違う場合は combinedConflict
+  est = C.estimate(rec({ growthNum: 2, measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'B' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 3, spRank: 'A' },
+    { target: 'スピード', stage: '入厩後', trainingCount: 3, spRank: 'C', measure: '完成まであと一息' },
+  ] }));
+  check('N23b', '本数測定139〜161とコメント式70〜98は食い違い',
+    !!est.narrowSpCount && est.narrowSpCount.combinedConflict === true && est.narrowSpCount.combined === null &&
+    est.narrowSpCount.notes.join('\n').indexOf('食い違っています') >= 0,
+    JSON.stringify(est.narrowSpCount));
+
+  // N24: 芝一杯の記録はあるが未変化なら pending
+  est = C.estimate(rec({ measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'B' },
+    { target: 'スピード', trainingType: '芝一杯', stage: '入厩後', trainingCount: 2, spRank: 'B' },
+  ] }));
+  check('N24', '未変化なら pending で候補なし',
+    !!est.narrowSpCount && est.narrowSpCount.pending === true && est.narrowSpCount.range === null,
+    JSON.stringify(est.narrowSpCount));
+
+  // N25: 芝併せも+1として数える
+  est = C.estimate(rec({ growthNum: 2, measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'C' },
+    { target: 'スピード', trainingType: '芝併せ', stage: '入厩後', trainingCount: 2, spRank: 'B' },
+  ] }));
+  check('N25', '芝併せ2本でB→初期SP83',
+    !!est.narrowSpCount && est.narrowSpCount.initial === 83 && est.narrowSpCount.count === 2,
+    JSON.stringify(est.narrowSpCount));
+  check('N25b', 'trainingType 芝併せは可', vr([{ trainingType: '芝併せ', stage: '入厩後' }]) === true);
+
+  // N26: ダート一杯の記録だけではSP本数測定は出ない
+  est = C.estimate(rec({ measureLog: [
+    { stage: '入厩後', trainingCount: 0, spRank: 'B' },
+    { target: 'スピード', trainingType: 'ダート一杯', stage: '入厩後', trainingCount: 3, spRank: 'A' },
+  ] }));
+  check('N26', 'ダート一杯ではSP本数測定は出ない', est.narrowSpCount === null, JSON.stringify(est.narrowSpCount));
 
   console.log('---');
   console.log('PASS ' + pass + ' / FAIL ' + fail);
