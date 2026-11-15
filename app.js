@@ -2367,6 +2367,151 @@ function matingTheoryPreviewHtml(pv) {
 }
 /* 計画フォーム（作成・編集）のプレビュー表示を更新する。父馬・母馬の
    選択が変わるたびに updatePlanDbStatus から呼ぶ。 */
+/* ---------- おすすめの相手（片方だけ選んだ時） ---------- */
+/* 父または母の一方だけがDB・自家生産馬から選ばれている時、もう一方の
+   候補を、既存の配合理論判定（checkMatingTheories）でプラスの理論が付く
+   相手だけ集めて、理論の優先順（至高＞奇跡＞超完璧＞完璧＞見事＞面白い＞
+   よくできた）が高い順に並べて出す。すべて参考・未検証で、配合の効果を
+   断定しない。危険な配合だけの相手はおすすめに入れない（プラスの理論も
+   付く相手は出すが、危険の注意を併記する）。
+   候補はDB全頭（3021件）と自家生産馬。全頭を判定するため、選んだ馬が
+   同じ間は結果を使い回す（partnerRecoCache）。判定は1回あたり全頭で
+   数百ミリ秒程度（実測）のため、キャッシュが前提。 */
+var PARTNER_RECO_LIMIT = 20;
+var PARTNER_RECO_LABELS = ['至高の配合', '奇跡の配合', '超完璧な配合', '完璧な配合', '見事な配合', '面白い配合', 'よくできた配合'];
+var partnerRecoCache = { key: '', result: null };
+/* 付いている理論のうち一番優先順が高いものの順位（0が最高）。
+   プラスの理論が何も付いていなければ -1。 */
+function theoryBestRank(th) {
+  if (!th) return -1;
+  if (th.supreme && th.supreme.hit) return 0;
+  if (th.miracle && th.miracle.hit) return 1;
+  if (th.superPerfect && th.superPerfect.hit) return 2;
+  if (th.perfect && th.perfect.hit) return 3;
+  if (th.migoto && th.migoto.hit) return 4;
+  if (th.omoshiroi && th.omoshiroi.hit) return 5;
+  if (th.yokudekita && th.yokudekita.hit) return 6;
+  return -1;
+}
+/* 付いている理論と、その根拠を短くした文の組（優先順）。
+   matingTheorySummaryHtml の長い根拠表示の短縮版で、判定そのものは
+   checkMatingTheories の結果をそのまま使う。 */
+function theoryShortReasons(th) {
+  var out = [];
+  if (!th) return out;
+  if (th.supreme && th.supreme.hit) out.push({ label: '至高の配合', reason: '同じ種牡馬「' + th.supreme.name + '」の3×4×5クロスで、因子が' + th.supreme.factorCount + '種類' });
+  if (th.miracle && th.miracle.hit) out.push({ label: '奇跡の配合', reason: '完璧な配合が成立し、4×3クロス「' + (th.miracle.cross ? th.miracle.cross.name : '') + '」がある' });
+  if (th.superPerfect && th.superPerfect.hit) out.push({ label: '超完璧な配合', reason: '見事な配合が成立し、8頭の親系統が8種類すべて異なる' });
+  if (th.perfect && th.perfect.hit) out.push({ label: '完璧な配合', reason: '見事な配合と面白い配合が同時に成立' });
+  if (th.migoto && th.migoto.hit) out.push({ label: '見事な配合', reason: '親系統の組み合わせが一致' });
+  if (th.omoshiroi && th.omoshiroi.hit) out.push({ label: '面白い配合', reason: '8頭の親系統が' + th.omoshiroi.distinctCount + '種類（7種類以上）' });
+  if (th.yokudekita && th.yokudekita.hit) out.push({ label: 'よくできた配合', reason: '共通する親系統が' + th.yokudekita.commonCount + '種類（3種類以上）' });
+  return out;
+}
+/* 固定した片親（fixedHorse: 血統で使う形、fixedRole: 'sire'／'dam'）に
+   対する、おすすめの相手を探す純粋な関数（DOMを使わない）。
+   fixedKey は選んだ馬の識別子（'db:番号'／'own:ID'）で、キャッシュの
+   キーと、同じ馬同士の組み合わせを除くために使う。
+   返り値: {total, items}。total は理論が付く相手の総数、items は
+   優先順に並べた上位 PARTNER_RECO_LIMIT 件。
+   item: {kind: 'db'／'own', dbIndex, ownId, name, badge, rank, label,
+   reasons: [{label, reason}], dangerous}。 */
+function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey) {
+  if (!fixedHorse) return { total: 0, items: [] };
+  var ownCount = (typeof ownHorses !== 'undefined' && Array.isArray(ownHorses)) ? ownHorses.length : 0;
+  var key = String(fixedKey || '') + '|' + fixedRole + '|' + String(fixedHorse.n || '') + '|own' + ownCount;
+  if (partnerRecoCache.key === key && partnerRecoCache.result) return partnerRecoCache.result;
+  var candidateRole = fixedRole === 'sire' ? 'dam' : 'sire';
+  var found = [];
+  function consider(candPed, kind, dbIndex, ownId, name, badge) {
+    if (!candPed) return;
+    var sire = fixedRole === 'sire' ? fixedHorse : candPed;
+    var dam = fixedRole === 'sire' ? candPed : fixedHorse;
+    var th = checkMatingTheories(sire, dam);
+    if (!th || !th.anyHit) return;
+    var reasons = theoryShortReasons(th);
+    if (!reasons.length) return;
+    var rank = theoryBestRank(th);
+    found.push({
+      kind: kind, dbIndex: dbIndex, ownId: ownId, name: name, badge: badge,
+      rank: rank, label: PARTNER_RECO_LABELS[rank], reasons: reasons,
+      dangerous: !!(th.dangerous && th.dangerous.hit)
+    });
+  }
+  if (STALLIONS && Array.isArray(STALLIONS.horses)) {
+    STALLIONS.horses.forEach(function (h, idx) {
+      if (fixedKey === 'db:' + idx) return;
+      consider(h, 'db', idx, null, h.n || '', 'データベース／子系統 ' + (h.chi || '—'));
+    });
+  }
+  if (typeof ownHorses !== 'undefined' && Array.isArray(ownHorses)) {
+    ownHorses.forEach(function (o) {
+      if (!ownHorseEligibleFor(candidateRole, o)) return;
+      if (fixedKey === 'own:' + o.id) return;
+      consider(ownHorsePedigree(o), 'own', null, o.id, o.name || '',
+        '自家生産馬（' + o.sex + '・' + o.generation + '代目／' + ownHorseOriginLabel(o) + '）');
+    });
+  }
+  found.sort(function (a, b) {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    if (a.reasons.length !== b.reasons.length) return b.reasons.length - a.reasons.length;
+    if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+    if (a.kind !== b.kind) return a.kind === 'own' ? -1 : 1;
+    return (a.dbIndex || 0) - (b.dbIndex || 0);
+  });
+  var result = { total: found.length, items: found.slice(0, PARTNER_RECO_LIMIT) };
+  partnerRecoCache = { key: key, result: result };
+  return result;
+}
+/* おすすめ一覧のHTML。候補はボタンになっていて、押すと相手として
+   選ばれる（attachPartnerRecoButtons で実際の選択処理をつなぐ）。 */
+function partnerRecommendationsHtml(recos, missingRole) {
+  var roleLabel = missingRole === 'sire' ? '父馬' : '母馬';
+  var html = '<div class="partner-reco"><h4>おすすめの' + roleLabel + '（参考・未検証）</h4>';
+  if (!recos || !recos.total) {
+    html += '<p class="note">理論が付く相手は見つかりませんでした（参考・未検証）。</p></div>';
+    return html;
+  }
+  html += '<p class="note">理論が付く相手が' + recos.total + '件見つかりました（上位' + recos.items.length + '件を表示）。タップすると' + roleLabel + 'に選ばれます。判定はユーザー検証による推定で、配合の効果を断定するものではありません。</p>';
+  html += '<ul class="reco-list">';
+  recos.items.forEach(function (it) {
+    html += '<li><button type="button" class="reco-btn" data-reco-kind="' + it.kind + '"' +
+      (it.kind === 'db' ? ' data-reco-db="' + it.dbIndex + '"' : ' data-reco-own="' + esc(it.ownId) + '"') + '>' +
+      '<span class="reco-name">' + esc(it.name) + '</span>' +
+      '<span class="reco-meta">' + esc(it.badge) + '</span>' +
+      '<span class="reco-theory">' + esc(it.label) + '</span>' +
+      '<span class="reco-reason">' + esc(it.reasons.map(function (r) { return r.label + '：' + r.reason; }).join('／')) + '</span>' +
+      (it.dangerous ? '<span class="reco-warn">危険な配合の条件にも当てはまるように見えます（参考）</span>' : '') +
+      '</button></li>';
+  });
+  html += '</ul></div>';
+  return html;
+}
+/* おすすめのボタンに選択処理をつなぐ。onPick(item) が呼ばれる。
+   item は {kind: 'db', dbIndex} または {kind: 'own', ownId}。 */
+function attachPartnerRecoButtons(container, onPick) {
+  if (!container || !container.querySelectorAll) return;
+  container.querySelectorAll('button[data-reco-kind]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (btn.getAttribute('data-reco-kind') === 'db') onPick({ kind: 'db', dbIndex: Number(btn.getAttribute('data-reco-db')) });
+      else onPick({ kind: 'own', ownId: btn.getAttribute('data-reco-own') });
+    });
+  });
+}
+/* プレビュー（matingTheoryPreview の返り値）が「片方だけ選択」の時に、
+   おすすめ一覧を box の末尾に足す共通処理。keys は {sireKey, damKey}
+   （選んだ馬の識別子 'db:番号'／'own:ID'、未選択は ''）。
+   onPick(missingRole, item) が候補を選んだ時の処理。 */
+function appendPartnerRecommendations(box, pv, keys, onPick) {
+  if (!box || !pv || pv.status !== 'one-side') return;
+  var fixedRole = pv.missingRole === 'sire' ? 'dam' : 'sire';
+  var fixedHorse = fixedRole === 'sire' ? pv.sire : pv.dam;
+  if (!fixedHorse) return;
+  var fixedKey = fixedRole === 'sire' ? keys.sireKey : keys.damKey;
+  var recos = findPartnerRecommendations(fixedHorse, fixedRole, fixedKey);
+  box.innerHTML += partnerRecommendationsHtml(recos, pv.missingRole);
+  attachPartnerRecoButtons(box, function (item) { onPick(pv.missingRole, item); });
+}
 function updatePlanTheoryPreview() {
   var box = $('plan-theory-preview');
   if (!box) return;
@@ -2376,7 +2521,16 @@ function updatePlanTheoryPreview() {
   var damName = $('p-dam') ? $('p-dam').value : '';
   var sireHasRef = (selectedDb.sire !== null && selectedDb.sire !== undefined) || !!selectedOwn.sire;
   var damHasRef = (selectedDb.dam !== null && selectedDb.dam !== undefined) || !!selectedOwn.dam;
-  box.innerHTML = matingTheoryPreviewHtml(matingTheoryPreview(sire, dam, sireName, damName, sireHasRef, damHasRef));
+  var pv = matingTheoryPreview(sire, dam, sireName, damName, sireHasRef, damHasRef);
+  box.innerHTML = matingTheoryPreviewHtml(pv);
+  /* 片方だけ選ばれている時は、おすすめの相手も出す。 */
+  appendPartnerRecommendations(box, pv, {
+    sireKey: selectedOwn.sire ? 'own:' + selectedOwn.sire : (selectedDb.sire !== null && selectedDb.sire !== undefined ? 'db:' + selectedDb.sire : ''),
+    damKey: selectedOwn.dam ? 'own:' + selectedOwn.dam : (selectedDb.dam !== null && selectedDb.dam !== undefined ? 'db:' + selectedDb.dam : '')
+  }, function (missingRole, item) {
+    if (item.kind === 'db') choosePlanSuggestion(missingRole, item.dbIndex);
+    else chooseOwnHorseForPlan(missingRole, item.ownId);
+  });
 }
 /* 子の血統・配合理論の確認の表示（折りたたみ・既定は閉じる）。 */
 function buildChildPedigreeHtml(sire, dam) {
@@ -3213,6 +3367,15 @@ els.dam.name ? els.dam.name.value : '',
 (gen.sireDbIndex !== null && gen.sireDbIndex !== undefined) || !!gen.sireOwnId,
 (gen.damDbIndex !== null && gen.damDbIndex !== undefined) || !!gen.damOwnId);
 previewDiv.innerHTML = matingTheoryPreviewHtml(pv);
+/* 片方だけ選ばれている時は、おすすめの相手も出す。 */
+appendPartnerRecommendations(previewDiv, pv, {
+sireKey: gen.sireOwnId ? 'own:' + gen.sireOwnId : (gen.sireDbIndex !== null && gen.sireDbIndex !== undefined ? 'db:' + gen.sireDbIndex : ''),
+damKey: gen.damOwnId ? 'own:' + gen.damOwnId : (gen.damDbIndex !== null && gen.damDbIndex !== undefined ? 'db:' + gen.damDbIndex : '')
+}, function (missingRole, item) {
+var ctx = suggestCtxFromEls(els[missingRole], generationSuggestStore(p, gen), missingRole);
+if (item.kind === 'db') chooseSuggestionOf(ctx, item.dbIndex);
+else chooseOwnSuggestionOf(ctx, item.ownId);
+});
 }
 ['sire', 'dam'].forEach(function (role) {
 var ctx = suggestCtxFromEls(els[role], generationSuggestStore(p, gen), role);

@@ -211,3 +211,19 @@ footer { margin-top: 26px; }
 .theory-preview li { font-size: 14px; margin: 4px 0; }
 .gen-editor { margin: 8px 0; }
 .gen-next, .gen-delete { margin: 8px 0; }
+/* おすすめの相手（片方だけ選んだ時）：理論が付く相手を優先順に並べる。
+   ボタンを押すとそのまま相手として選ばれる。 */
+.partner-reco { margin: 10px 0 4px; border-top: 1px dashed #2c3f7d; padding-top: 8px; }
+.partner-reco h4 { margin: 4px 0 6px; font-size: 14px; color: #ffd34d; }
+.reco-list { list-style: none; margin: 0; padding: 0; }
+.reco-list li { margin: 0 0 6px; }
+.reco-btn {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: #131c42; color: #eef2ff; border: 1px solid #2c3f7d;
+  border-radius: 14px; padding: 8px 12px; font: inherit;
+}
+.reco-btn .reco-name { display: block; font-weight: bold; font-size: 15px; }
+.reco-btn .reco-meta { display: block; font-size: 12px; color: #aab8dd; }
+.reco-btn .reco-theory { display: block; font-size: 13px; color: #ffd34d; margin-top: 2px; }
+.reco-btn .reco-reason { display: block; font-size: 12px; color: #c9d4f5; }
+.reco-btn .reco-warn { display: block; font-size: 12px; color: #ff9d9d; }
