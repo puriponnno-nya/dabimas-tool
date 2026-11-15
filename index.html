@@ -145,72 +145,92 @@
       <p class="note">調教本数は、将来のスピード・スタミナ測定に使うかもしれない記録です。最適な本数は未確定です。入れなくても登録できます。</p>
       <fieldset class="ml-box">
         <legend>測定メモ（絞り込み用・任意）</legend>
-        <p class="note">1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れてください。調教本数と、変わった内容（コメント変化／スペースあり／ランク変化）を記録すると、判定結果に測定による絞り込み（参考・未検証）が出ます。対象（スピード／スタミナ）を選ぶと、その時点のSPランク／STランクから両方の絞り込みが出ます。スタミナ側はスピード側の到達率の考え方を当てはめたもの（参考・未検証）です。数値は断定しません。</p>
-        <div class="row">
-          <label>時期（解析日・週）
-            <input id="ml-at" type="text" autocomplete="off" placeholder="例：2歳3月5週">
-          </label>
-          <label>段階
-            <select id="ml-stage">
-              <option value="">未入力</option>
-              <option value="入厩前">入厩前</option>
-              <option value="入厩後">入厩後</option>
-            </select>
-          </label>
+        <p class="note">1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れてください。入力はボタンのタップが中心です。時期・本数・ランクなどは次の記録に引き継がれるので、変わったところだけ直せば大丈夫です。スピードは測定用コメントとSPランクから候補を絞ります。スタミナはダート調教による測定法です：入厩直後のSTランクを記録し、ダート一杯を1本ずつ行って、STランクが初めて変わるまでの本数を記録すると、最大ST候補（2つ）が出ます。すべて参考・未検証で、数値は断定しません。</p>
+        <label>時期（解析日・週）
+          <input id="ml-at" type="text" autocomplete="off" placeholder="例：2歳3月5週">
+        </label>
+        <button type="button" id="ml-at-copy">前回の時期を使う</button>
+        <p class="ml-label">段階</p>
+        <div class="btn-group" id="ml-stage-group">
+          <button type="button" data-val="">未入力</button>
+          <button type="button" data-val="入厩前">入厩前</button>
+          <button type="button" data-val="入厩後">入厩後</button>
         </div>
-        <div class="row">
-          <label>調教本数
-            <input id="ml-training" type="number" min="0" step="1" autocomplete="off" placeholder="例：16">
-          </label>
-          <label>変わった内容
-            <select id="ml-changed">
-              <option value="">未入力</option>
-              <option value="コメント変化">コメント変化</option>
-              <option value="スペースあり">スペースあり</option>
-              <option value="ランク変化">ランク変化</option>
-              <option value="その他">その他</option>
-            </select>
-          </label>
+        <input type="hidden" id="ml-stage" value="">
+        <p class="ml-label">対象</p>
+        <div class="btn-group" id="ml-target-group">
+          <button type="button" data-val="スピード">スピード</button>
+          <button type="button" data-val="スタミナ">スタミナ</button>
         </div>
-        <div class="row">
-          <label>SPランク
-            <select id="ml-sp">
-              <option value="">未入力</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-            </select>
-          </label>
-          <label>STランク
-            <select id="ml-st">
-              <option value="">未入力</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-            </select>
-          </label>
+        <input type="hidden" id="ml-target" value="スピード">
+        <p class="ml-label">調教の種類</p>
+        <div class="btn-group" id="ml-training-type-group">
+          <button type="button" data-val="">未入力</button>
+          <button type="button" data-val="芝一杯">芝一杯</button>
+          <button type="button" data-val="ダート一杯">ダート一杯</button>
+          <button type="button" data-val="ダート併せ">ダート併せ</button>
+          <button type="button" data-val="鬼ダート">鬼ダート</button>
+          <button type="button" data-val="鬼ウッド">鬼ウッド</button>
+          <button type="button" data-val="その他">その他</button>
         </div>
-        <div class="row">
-          <label>対象
-            <select id="ml-target">
-              <option value="スピード">スピード</option>
-              <option value="スタミナ">スタミナ</option>
-            </select>
-          </label>
-          <label>測定用コメント
-            <select id="ml-measure">
-              <option value="">未入力</option>
-              <option value="BC登録はまだ先（スペースなし）">BC登録はまだ先ですね（スペースなし）</option>
-              <option value="BC登録は　まだ先（スペースあり）">BC登録は　まだ先ですね（スペースあり）</option>
-              <option value="完成まであと一息">完成まであと一息でしょうか</option>
-              <option value="準備はできた">準備はできたようですね</option>
-            </select>
-          </label>
+        <input type="hidden" id="ml-training-type" value="">
+        <p class="note">スタミナ測定に使えるのはダート一杯だけです（1本＝ST＋1）。馬なり・強めは上昇が確定ではないので数えません。ダート併せは併せ効果でずれる場合があります。鬼ダートは＋2で境界をまたぐため、初期測定には向きません。</p>
+        <p class="ml-label">調教本数（累計）</p>
+        <div class="stepper">
+          <button type="button" id="ml-training-minus">−</button>
+          <input id="ml-training" type="number" min="0" step="1" autocomplete="off" placeholder="0">
+          <button type="button" id="ml-training-plus">＋</button>
         </div>
+        <div class="btn-group" id="ml-training-chips">
+          <button type="button" data-count="0">0</button>
+          <button type="button" data-count="1">1</button>
+          <button type="button" data-count="2">2</button>
+          <button type="button" data-count="3">3</button>
+          <button type="button" data-count="5">5</button>
+          <button type="button" data-count="10">10</button>
+          <button type="button" data-count="15">15</button>
+          <button type="button" data-count="20">20</button>
+          <button type="button" data-count="30">30</button>
+        </div>
+        <p class="ml-label">SPランク</p>
+        <div class="btn-group" id="ml-sp-group">
+          <button type="button" data-val="">未入力</button>
+          <button type="button" data-val="A">A</button>
+          <button type="button" data-val="B">B</button>
+          <button type="button" data-val="C">C</button>
+          <button type="button" data-val="D">D</button>
+          <button type="button" data-val="E">E</button>
+        </div>
+        <input type="hidden" id="ml-sp" value="">
+        <p class="ml-label">STランク</p>
+        <div class="btn-group" id="ml-st-group">
+          <button type="button" data-val="">未入力</button>
+          <button type="button" data-val="A">A</button>
+          <button type="button" data-val="B">B</button>
+          <button type="button" data-val="C">C</button>
+          <button type="button" data-val="D">D</button>
+          <button type="button" data-val="E">E</button>
+        </div>
+        <input type="hidden" id="ml-st" value="">
+        <p class="ml-label">測定用コメント（スピード用）</p>
+        <div class="btn-group" id="ml-measure-group">
+          <button type="button" data-val="">未入力</button>
+          <button type="button" data-val="BC登録はまだ先（スペースなし）">BC登録はまだ先ですね（スペースなし）</button>
+          <button type="button" data-val="BC登録は　まだ先（スペースあり）">BC登録は　まだ先ですね（スペースあり）</button>
+          <button type="button" data-val="完成まであと一息">完成まであと一息でしょうか</button>
+          <button type="button" data-val="準備はできた">準備はできたようですね</button>
+        </div>
+        <input type="hidden" id="ml-measure" value="">
+        <p class="note">この4コメントはスピード到達率の指標です。スタミナの絞り込みには使いません。</p>
+        <p class="ml-label">変わった内容</p>
+        <div class="btn-group" id="ml-changed-group">
+          <button type="button" data-val="">未入力</button>
+          <button type="button" data-val="コメント変化">コメント変化</button>
+          <button type="button" data-val="スペースあり">スペースあり</button>
+          <button type="button" data-val="ランク変化">ランク変化</button>
+          <button type="button" data-val="その他">その他</button>
+        </div>
+        <input type="hidden" id="ml-changed" value="">
         <label>メモ
           <input id="ml-note" type="text" autocomplete="off" placeholder="例：EからDに変わった">
         </label>

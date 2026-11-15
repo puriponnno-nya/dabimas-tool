@@ -15,7 +15,7 @@ var PLAN_STATUSES = ['計画', '予約', '実行済み'];
 
 /* data/*.json と同じ内容の内蔵コピー（file:// で開いたとき用）。正本は data/*.json。 */
 var FALLBACK_COMMENTS = {"categories":{"exp":"期待と条件","fea":"特徴","fut":"将来評価","tal":"素質評価"},"cmt":[{"c":"tal","out":"凄い素質","src":"これは凄い素質の馬ですね"},{"c":"fut","out":"いくつかのタイトルを狙える","src":"将来はいくつかのタイトルも狙えるでしょうね"},{"c":"fea","out":"スピードが付きそう","src":"スピードが付きそうな馬体ですね"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ上手くいけば三冠もあると思います"},{"c":"exp","out":"調教が上手くいけば三冠の可能性","src":"調教さえ巧くいけば三冠もあると思います"},{"c":"fut","out":"どこに出しても恥ずかしくないとの評価","src":"これならどこに出しても恥ずかしくないでしょう"},{"c":"exp","out":"しっかり育てて活躍を期待","src":"しっかり育てて活躍してもらいましょう"},{"c":"fut","out":"期待できる","src":"期待できます"},{"c":"fea","out":"スピードが付きそうな馬体／短距離適正あり／牛嶋厩舎を推奨","src":"スピードが付きそうな馬体ですね\n短距離適正もありそうですし\n牛嶋厩舎を推奨します"},{"c":"fea","out":"強い心肺機能／八木沼厩舎でスタミナ強化","src":"強い心肺機能を備えてますね長距離馬の育成が得意な八木沼厩舎でスタミナ強化が良いでしょう"},{"c":"exp","out":"桜花賞を目標にする提案","src":"まずは桜花賞を目指しましょう"},{"c":"exp","out":"活躍時期も早そう／朝日杯フューチュリティステークスを目標に仕上げる提案","src":"活躍時期も早そうですし朝日杯フューチュリティステークスを目標に仕上げてみてはいかがでしょうか"},{"c":"fut","out":"海外も視野に入れるとの評価","src":"将来は海外も視野に入れたほうが良いでしょう"},{"c":"tal","out":"計り知れない素質","src":"計り知れない素質を感じます"},{"c":"tal","out":"馬神コメントあり","src":"この御方は馬神様の化身かもしれません\n拝んでもいいですか？"},{"c":"tal","out":"後光コメントあり","src":"常識では測れないような馬ですね\nん……！？一瞬後光が射したような……"}],"cmx":[],"measure":[{"kind":"BC登録はまだ先（スペースなし）","pattern":"BC登録はまだ先ですね","spaceSensitive":true},{"kind":"BC登録は　まだ先（スペースあり）","pattern":"BC登録は　まだ先ですね","spaceSensitive":true},{"kind":"完成まであと一息","pattern":"完成まであと一息でしょうか"},{"kind":"準備はできた","pattern":"準備はできたようですね"}]};
-var FALLBACK_RANKS = {"analysisStructure":{"middle":"中段はSPとSTのどちらが勝っているか（バランス）","note":"馬体解析レポートの3段構造（ユーザー検証による推定・共有情報。参考・未検証）","upper":"上段（1行目＋2〜3行目）はSP＋STの合計値（総合力）"},"bands":{"g1":{"max":149,"min":140,"name":"G1を狙える"},"glow":{"added":"2025-02-19","min":275,"name":"後光","note":"入厩前・上段コメント。2025年2月19日の更新で追加。2025-02-28のふふ牧場氏X投稿「274 すが／275 後光／確認しました」で274/275両側の一次報告あり（SP・ST内訳、測定手順、馬名、画像なし、同じ馬か別馬かも未確認）。境界確定ではない。","phrase":"常識では測れないような馬ですね","when":"入厩前・上段コメント"},"god":{"added":"2026-03","min":300,"name":"馬神","note":"2025年はGⅠ勝利後の下段コメント。2026年3月からは入厩前にも出る。入厩前の文言「この御方は馬神様の化身かもしれません 拝んでもいいですか？」。合計300での表示例（レオ蔵牧場 note 2025-03-31、SP177・ST123）あり。299で非表示・300で表示の対比検証は未確認。","phrase":"この御方は馬神様の化身かもしれません","when":"2025年はGⅠ勝利後の下段コメント、2026年3月からは入厩前にも"},"overseas":{"max":229,"min":180,"name":"海外も視野"},"representative":{"max":249,"min":230,"name":"時代を代表"},"shogun":{"max":null,"min":250,"name":"時代を築く"},"title":{"female":{"max":179,"min":150},"male":{"max":179,"min":160},"name":"いくつかのタイトル"},"weight":{"max":139,"min":120,"name":"重賞を狙える"}},"bcMark":{"method":"条件を揃えた2頭を「ひとりでBC」で走らせ、印が釣り合うまで芝一杯調教の本数を増やす。才能の効果を「芝一杯◯本分」で表す。","note":"BC印比較によるスピード測定（参考情報。v1では測定機能として実装しない）。注意点：内枠優位、コースと騎手の固定（新潟など）、隠し得意距離（距離適性範囲内で特定の1距離のみスピードが高まる）、調子の固定。","target":"特別調教師才能などのスピード上昇効果"},"entryStamina":{"note":"入厩直後のスタミナは最大値（限界値）の半分という仕様があるとされる。入厩時点でスタミナDでも、育成完了時の最大スタミナがAやBに到達しうる。入厩時のSTランクだけで育成後のSTを断定しない。","rule":"入厩直後のスタミナは最大値の半分"},"forecastNote":"産駒予想の画面では、上段コメントは「凄い素質／海外も視野」までしか出ない。後光が出ないからといって合計275未満とは限らない。","measurementHypothesis":{"hypothesis":"スピード・スタミナ測定は、入厩前と入厩後の調教本数によるコメントの推移で行うはず（仮説・未確定）。今の最適は未確定。","needed":["解析時期（入厩前／入厩後）","調教本数","コメント文（測定用コメント3種）","SP/STランク","メモリ","解析日・週"],"note":"将来の測定に使うかもしれない記録だけを残す。数値測定の機能はまだ作らない。要らなくなったら消してよい。"},"measureNarrowing":{"note":"測定メモによる絞り込み（ユーザー検証による推定・共有情報。参考・未検証）。数値を断定しない。測定用コメントとその時点のランク（対象がスピードならSP、スタミナならST）、メモリから、最大値の候補範囲を参考として絞る。同じ対象の記録が複数あれば、各記録の候補範囲の重なり（共通部分）を取る。重なりが無くなれば「記録同士が食い違っています」と表示し、数値範囲は出さない。調教本数で一律に変わるのではなく、到達率とメモリで変わる。","memory1":{"BC登録はまだ先（スペースなし）":null,"BC登録は　まだ先（スペースあり）":null,"完成まであと一息":{"hi":85,"label":"75%以上・85%未満","lo":75},"準備はできた":{"hi":100,"label":"85%以上","lo":85}},"memory2etc":{"BC登録はまだ先（スペースなし）":{"hi":75,"label":"75%未満","lo":0},"BC登録は　まだ先（スペースあり）":{"hi":85,"label":"75%以上・85%未満","lo":75},"完成まであと一息":{"hi":100,"label":"85%以上","lo":85},"準備はできた":null},"readyUnknown":"メモリ2などで「準備はできたようですね」になる到達率は今回の資料では未確認。絞り込みには使わない。","rule":"到達率＝現在の値÷最大値。最大値の候補は、現在のランク範囲÷到達率で参考として絞る。初期候補範囲と食い違う場合は、どちらかの読み・条件が未確定の可能性があると表示する。","staminaNote":"スタミナ側の絞り込みは、スピード側の到達率の考え方をそのまま当てはめたもの（参考・未検証）。スタミナ側はスピード側ほど裏付けがない。"},"ranges":{"A":{"max":null,"min":100},"B":{"max":99,"min":85},"C":{"max":84,"min":70},"D":{"max":69,"min":55},"E":{"max":54,"min":0}},"source":"ユーザー検証による推定・共有情報。公式が数値を明示した資料は確認できていない。出典：5ch 2018-12-15、ぎ〜さん 2025-02-20、ふふ牧場 note 2026-03更新、ふふ牧場 X 2025-02-28（274 すが／275 後光）、レオ蔵牧場 note 2025-03-31（SP177・ST123＝合計300で馬神）、ダビマスメモ 2018-02-20（https://dbmsmemo.blogspot.com/2018/02/blog-post_20.html）。スピード早見表：たかなさん X投稿 2026-11-12（https://x.com/mmmmdd_tw/status/2120561500523995322）。","talent":{"note":"この文があると SP・ST 各81以上とみなす（参考・未検証）。Cランク（70〜84）でも出る。AAや合計180以上は保証しない。SP100・ST80では出ない。","phrase":"これは凄い素質の馬ですね","spMin":81,"stMin":81},"immenseTalent":{"note":"この文があると SP・ST 各120以上とみなす（参考・未検証）。2023-05-17の掲示板テンプレによる。片方が120以上でもう片方が110〜119の場合は「素晴らしい馬」系で、こちらは未対応（120以上の下限は使わない）。","phrase":"計り知れない素質を感じます","spMin":120,"stMin":120},"title":{"note":"この文があると SP＋ST が牡160以上／牝150以上とみなす（参考・未検証）。センの条件は未確認のため未使用。","phrase":"将来はいくつかのタイトルも狙えるでしょうね","sumMin":{"牝":150,"牡":160}},"version":8,"warning":"参考・未検証（ユーザー検証による推定・共有情報）。公式が数値を明示した資料は確認できていない。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認。確定値ではない。","measureThresholds":{"note":"測定用コメントの変化条件（ユーザー検証による推定・共有情報。参考・未検証）。公式発表はない。調教本数で一律に変わるのではなく、スピードの最大値に対する到達率と、成長タイプ（メモリ）で変わる。数値を出す計算はしない。","memory1":{"memory":"メモリ1・超早熟","at75":"完成まであと一息でしょうか","at85":"準備はできたようですね","note":"75%で「あと一息」、85%で「準備はできた」になる。メモリ2などと同じコメント名で判定しないこと"},"memory2etc":{"memory":"メモリ2など","under75":"BC登録はまだ先ですね（スペースなし）","from75to85":"BC登録は　まだ先ですね（スペースあり）","at85":"完成まであと一息でしょうか","ready":"メモリ2などで「準備はできたようですね」になる到達率は今回の資料では未確認"},"speedBee":{"horse":"スピードビー号（超早熟、2歳1月入厩、芝・強め調教）","at8":"スピードD・完成まであと一息でしょうか","at16":"スピードC・完成まであと一息でしょうか","at26":"スピードC・準備はできたようですね","at34":"スピードB・準備はできたようですね","switchRange":"「あと一息→準備はできた」の切り替わりは累計17〜26本の間。26本目で切り替わったとは断定できない","note":"26本時点でスピードC・スタミナEでも「準備はできた」が出る。「準備はできた」は全能力が最大になった意味ではない"},"memory1Oni":{"note":"メモリ1の鬼調教例：入厩時スピードAの馬。現在スピード105を起点に鬼芝1本後も「あと一息」のまま、続けて鬼ウッド1本後で「準備はできた」へ。スピード108で85%到達、最大スピード127。通常芝と鬼芝・鬼ウッドを単純に同じ「1本」として合算できない"},"spaceCount":{"note":"スペースが入る本数の例：スピードA到達後、スピード調教10回目ではスペースなし、11回目でスペースあり（スピード147と判定）。入厩から11本という意味ではない"}},"speedTable":{"note":"たかなさんのスピード早見表 詳細版（ユーザー検証による推定・共有情報。参考・未検証）。公式発表ではない。スピード120〜209、メモリ1〜6。行は最大スピード、列はメモリ・到達率ごとの現在スピード。表から数値を自動計算する機能は実装しない。参考表示のみ。","source":"たかなさん（@mmmmdd_tw）X投稿 2026-11-12 1:57 JST https://x.com/mmmmdd_tw/status/2120561500523995322 。スピード200に到達したプレイヤーが現れたことを受けて拡張。書き起こし：NotebookLMまとめ（dabimas_speed_table.xlsx、ユーザーのファイル。リポジトリには含めない）。","caps":{"memory1":{"1歳9月":100},"memory2":{"1歳9月":90,"2歳7月":94,"2歳9月":98,"2歳11月":100},"memory3":{"1歳9月":80,"2歳7月":84,"2歳9月":88,"2歳11月":92,"3歳1月":96,"3歳3月":100},"memory4":{"1歳9月":70,"2歳7月":74,"2歳9月":78,"2歳11月":82,"3歳1月":86,"3歳3月":90,"3歳5月":94,"3歳7月":98,"3歳9月":100},"memory5":{"1歳9月":50,"2歳7月":52,"2歳9月":54,"2歳11月":56,"3歳1月":60,"3歳3月":64,"3歳5月":68,"3歳7月":72,"3歳9月":80,"3歳11月":88,"4歳1月":92,"4歳3月":96,"4歳5月":100},"memory6":{"1歳9月":50,"3歳7月":52,"3歳9月":56,"3歳11月":60,"4歳1月":68,"4歳3月":76,"4歳5月":84}},"capsNote":"成長タイプ別・時期ごとの能力蓋（上限到達率%）。メモリ1は1歳9月で100%、メモリ2は2歳11月で100%、メモリ3は3歳3月で100%、メモリ4は3歳9月で100%、メモリ5は4歳5月で100%。メモリ6は4歳5月時点で84%（それ以降は原表に記載なし）。","bcMidComments":[{"range":"〜49","speed":"走りきる脚","stamina":"心配？"},{"range":"50〜69","speed":"そこそこの脚","stamina":"心配"},{"range":"70〜79","speed":"脚力は普通","stamina":"ぼちぼち"},{"range":"80〜89","speed":"良い脚","stamina":"あるほう"},{"range":"90〜94","speed":"かなりの脚力","stamina":"自信"},{"range":"95〜96","speed":"凄い脚力","stamina":"言うこと"},{"range":"97〜99","speed":"並外れた脚力","stamina":"一級品"},{"range":"100〜104","speed":"物凄い脚力","stamina":"一級品"},{"range":"105〜119","speed":"非凡な脚力","stamina":"飛びぬけ"},{"range":"120〜129","speed":"他の追随を","stamina":"心肺機能は特別"},{"range":"130〜","speed":"空を飛ぶような","stamina":"いくらでも"}],"bcMidNote":"BC登録時の中段コメントの数値範囲。書き起こしではコメント文は文頭のみのため、全文は原表（X投稿の画像）を参照すること。","upperBandsNote":"入厩時上段コメントの合計帯は既存の bands と同じ（300以上 馬神、275以上 後光、250以上 時代を築く、230〜249 時代を代表、180〜229 海外も視野）。条件は変えない。","example":"最大スピード200・メモリ1：コメ変化85%は170、あと一息75%は150、蓋100%は200。最大スピード150・メモリ2：蓋90%は135、2歳9月98%は147。"}};
+var FALLBACK_RANKS = {"analysisStructure":{"middle":"中段はSPとSTのどちらが勝っているか（バランス）","note":"馬体解析レポートの3段構造（ユーザー検証による推定・共有情報。参考・未検証）","upper":"上段（1行目＋2〜3行目）はSP＋STの合計値（総合力）"},"bands":{"g1":{"max":149,"min":140,"name":"G1を狙える"},"glow":{"added":"2025-02-19","min":275,"name":"後光","note":"入厩前・上段コメント。2025年2月19日の更新で追加。2025-02-28のふふ牧場氏X投稿「274 すが／275 後光／確認しました」で274/275両側の一次報告あり（SP・ST内訳、測定手順、馬名、画像なし、同じ馬か別馬かも未確認）。境界確定ではない。","phrase":"常識では測れないような馬ですね","when":"入厩前・上段コメント"},"god":{"added":"2026-03","min":300,"name":"馬神","note":"2025年はGⅠ勝利後の下段コメント。2026年3月からは入厩前にも出る。入厩前の文言「この御方は馬神様の化身かもしれません 拝んでもいいですか？」。合計300での表示例（レオ蔵牧場 note 2025-03-31、SP177・ST123）あり。299で非表示・300で表示の対比検証は未確認。","phrase":"この御方は馬神様の化身かもしれません","when":"2025年はGⅠ勝利後の下段コメント、2026年3月からは入厩前にも"},"overseas":{"max":229,"min":180,"name":"海外も視野"},"representative":{"max":249,"min":230,"name":"時代を代表"},"shogun":{"max":null,"min":250,"name":"時代を築く"},"title":{"female":{"max":179,"min":150},"male":{"max":179,"min":160},"name":"いくつかのタイトル"},"weight":{"max":139,"min":120,"name":"重賞を狙える"}},"bcMark":{"method":"条件を揃えた2頭を「ひとりでBC」で走らせ、印が釣り合うまで芝一杯調教の本数を増やす。才能の効果を「芝一杯◯本分」で表す。","note":"BC印比較によるスピード測定（参考情報。v1では測定機能として実装しない）。注意点：内枠優位、コースと騎手の固定（新潟など）、隠し得意距離（距離適性範囲内で特定の1距離のみスピードが高まる）、調子の固定。","target":"特別調教師才能などのスピード上昇効果"},"entryStamina":{"note":"入厩直後のスタミナは最大値（限界値）の半分という仕様があるとされる。入厩時点でスタミナDでも、育成完了時の最大スタミナがAやBに到達しうる。入厩時のSTランクだけで育成後のSTを断定しない。","rule":"入厩直後のスタミナは最大値の半分"},"forecastNote":"産駒予想の画面では、上段コメントは「凄い素質／海外も視野」までしか出ない。後光が出ないからといって合計275未満とは限らない。","measurementHypothesis":{"hypothesis":"スピード・スタミナ測定は、入厩前と入厩後の調教本数によるコメントの推移で行うはず（仮説・未確定）。今の最適は未確定。","needed":["解析時期（入厩前／入厩後）","調教本数","コメント文（測定用コメント3種）","SP/STランク","メモリ","解析日・週"],"note":"将来の測定に使うかもしれない記録だけを残す。数値測定の機能はまだ作らない。要らなくなったら消してよい。"},"measureNarrowing":{"note":"測定メモによる絞り込み（ユーザー検証による推定・共有情報。参考・未検証）。数値を断定しない。スピード側は、測定用コメントとその時点のSPランク、メモリから、最大値の候補範囲を参考として絞る。同じ対象の記録が複数あれば、各記録の候補範囲の重なり（共通部分）を取る。重なりが無くなれば「記録同士が食い違っています」と表示し、数値範囲は出さない。調教本数で一律に変わるのではなく、到達率とメモリで変わる。スタミナ側は、コメントによる絞り込みを廃止し、ダート調教による測定法（staminaDart）に置き換えた。","memory1":{"BC登録はまだ先（スペースなし）":null,"BC登録は　まだ先（スペースあり）":null,"完成まであと一息":{"hi":85,"label":"75%以上・85%未満","lo":75},"準備はできた":{"hi":100,"label":"85%以上","lo":85}},"memory2etc":{"BC登録はまだ先（スペースなし）":{"hi":75,"label":"75%未満","lo":0},"BC登録は　まだ先（スペースあり）":{"hi":85,"label":"75%以上・85%未満","lo":75},"完成まであと一息":{"hi":100,"label":"85%以上","lo":85},"準備はできた":null},"readyUnknown":"メモリ2などで「準備はできたようですね」になる到達率は今回の資料では未確認。絞り込みには使わない。","rule":"到達率＝現在の値÷最大値。最大値の候補は、現在のランク範囲÷到達率で参考として絞る。初期候補範囲と食い違う場合は、どちらかの読み・条件が未確定の可能性があると表示する。","staminaDart":{"note":"ダート調教によるスタミナ測定（ユーザー検証による推定・共有情報。参考・未検証）。入厩直後のスタミナは、成長タイプ（メモリ）に関係なく最大値のおよそ50％とされる。BC登録の4コメントはスピード到達率の指標であり、スタミナの到達率に読み替える根拠は確認できなかったため、コメント＋STランクによるスタミナ絞り込みは廃止し、この方法に置き換えた。","rule":"入厩直後のSTランクを記録し、ダート一杯を1本ずつ行って、STランクが初めて変わるまでの本数nを数える。入厩時ST初期値＝境界値T−n（Tは変わった先のランクの下限：D＝55、C＝70、B＝85、A＝100）。最大ST候補＝2×初期値 または 2×初期値＋1（2候補）。","counts":"ダート一杯1本＝ST＋1（確定上昇範囲）。馬なり・強めは上昇が確定ではないので数えない。ダート併せは基本＋1だが併せ効果でずれる場合がある。鬼ダートはST＋2で、境界をまたぐため初期測定には不向き。鬼ウッドはSP＋1・ST＋1。調教抜けの境界は資料により差があり未確認のため、数値として使わない。","example":"入厩時Dでダート一杯5本でC→初期値65→最大ST候補130／131。入厩時Eで1本でD→初期値54→108／109。","source":"appligame「久しぶりに能力測定の話①」（2023-02-15公開、2023-03-03更新）http://appligame.xyz/dabimas/archives/42563、たかな channel 動画（2026-03-20）https://www.youtube.com/watch?v=JNcIF2xVd30、appligame「能力測定とかの雑記①」（2019-11-20公開）http://appligame.xyz/dabimas/archives/30505。Perplexity調査（2026-11-15）。"}},"ranges":{"A":{"max":null,"min":100},"B":{"max":99,"min":85},"C":{"max":84,"min":70},"D":{"max":69,"min":55},"E":{"max":54,"min":0}},"source":"ユーザー検証による推定・共有情報。公式が数値を明示した資料は確認できていない。出典：5ch 2018-12-15、ぎ〜さん 2025-02-20、ふふ牧場 note 2026-03更新、ふふ牧場 X 2025-02-28（274 すが／275 後光）、レオ蔵牧場 note 2025-03-31（SP177・ST123＝合計300で馬神）、ダビマスメモ 2018-02-20（https://dbmsmemo.blogspot.com/2018/02/blog-post_20.html）。スピード早見表：たかなさん X投稿 2026-11-12（https://x.com/mmmmdd_tw/status/2120561500523995322）。","talent":{"note":"この文があると SP・ST 各81以上とみなす（参考・未検証）。Cランク（70〜84）でも出る。AAや合計180以上は保証しない。SP100・ST80では出ない。","phrase":"これは凄い素質の馬ですね","spMin":81,"stMin":81},"immenseTalent":{"note":"この文があると SP・ST 各120以上とみなす（参考・未検証）。2023-05-17の掲示板テンプレによる。片方が120以上でもう片方が110〜119の場合は「素晴らしい馬」系で、こちらは未対応（120以上の下限は使わない）。","phrase":"計り知れない素質を感じます","spMin":120,"stMin":120},"title":{"note":"この文があると SP＋ST が牡160以上／牝150以上とみなす（参考・未検証）。センの条件は未確認のため未使用。","phrase":"将来はいくつかのタイトルも狙えるでしょうね","sumMin":{"牝":150,"牡":160}},"version":9,"warning":"参考・未検証（ユーザー検証による推定・共有情報）。公式が数値を明示した資料は確認できていない。Ver.4.0.0（2023-10-26）以降も同じ境界かは未確認。確定値ではない。","measureThresholds":{"note":"測定用コメントの変化条件（ユーザー検証による推定・共有情報。参考・未検証）。公式発表はない。調教本数で一律に変わるのではなく、スピードの最大値に対する到達率と、成長タイプ（メモリ）で変わる。数値を出す計算はしない。","memory1":{"memory":"メモリ1・超早熟","at75":"完成まであと一息でしょうか","at85":"準備はできたようですね","note":"75%で「あと一息」、85%で「準備はできた」になる。メモリ2などと同じコメント名で判定しないこと"},"memory2etc":{"memory":"メモリ2など","under75":"BC登録はまだ先ですね（スペースなし）","from75to85":"BC登録は　まだ先ですね（スペースあり）","at85":"完成まであと一息でしょうか","ready":"メモリ2などで「準備はできたようですね」になる到達率は今回の資料では未確認"},"speedBee":{"horse":"スピードビー号（超早熟、2歳1月入厩、芝・強め調教）","at8":"スピードD・完成まであと一息でしょうか","at16":"スピードC・完成まであと一息でしょうか","at26":"スピードC・準備はできたようですね","at34":"スピードB・準備はできたようですね","switchRange":"「あと一息→準備はできた」の切り替わりは累計17〜26本の間。26本目で切り替わったとは断定できない","note":"26本時点でスピードC・スタミナEでも「準備はできた」が出る。「準備はできた」は全能力が最大になった意味ではない"},"memory1Oni":{"note":"メモリ1の鬼調教例：入厩時スピードAの馬。現在スピード105を起点に鬼芝1本後も「あと一息」のまま、続けて鬼ウッド1本後で「準備はできた」へ。スピード108で85%到達、最大スピード127。通常芝と鬼芝・鬼ウッドを単純に同じ「1本」として合算できない"},"spaceCount":{"note":"スペースが入る本数の例：スピードA到達後、スピード調教10回目ではスペースなし、11回目でスペースあり（スピード147と判定）。入厩から11本という意味ではない"}},"speedTable":{"note":"たかなさんのスピード早見表 詳細版（ユーザー検証による推定・共有情報。参考・未検証）。公式発表ではない。スピード120〜209、メモリ1〜6。行は最大スピード、列はメモリ・到達率ごとの現在スピード。表から数値を自動計算する機能は実装しない。参考表示のみ。","source":"たかなさん（@mmmmdd_tw）X投稿 2026-11-12 1:57 JST https://x.com/mmmmdd_tw/status/2120561500523995322 。スピード200に到達したプレイヤーが現れたことを受けて拡張。書き起こし：NotebookLMまとめ（dabimas_speed_table.xlsx、ユーザーのファイル。リポジトリには含めない）。","caps":{"memory1":{"1歳9月":100},"memory2":{"1歳9月":90,"2歳7月":94,"2歳9月":98,"2歳11月":100},"memory3":{"1歳9月":80,"2歳7月":84,"2歳9月":88,"2歳11月":92,"3歳1月":96,"3歳3月":100},"memory4":{"1歳9月":70,"2歳7月":74,"2歳9月":78,"2歳11月":82,"3歳1月":86,"3歳3月":90,"3歳5月":94,"3歳7月":98,"3歳9月":100},"memory5":{"1歳9月":50,"2歳7月":52,"2歳9月":54,"2歳11月":56,"3歳1月":60,"3歳3月":64,"3歳5月":68,"3歳7月":72,"3歳9月":80,"3歳11月":88,"4歳1月":92,"4歳3月":96,"4歳5月":100},"memory6":{"1歳9月":50,"3歳7月":52,"3歳9月":56,"3歳11月":60,"4歳1月":68,"4歳3月":76,"4歳5月":84}},"capsNote":"成長タイプ別・時期ごとの能力蓋（上限到達率%）。メモリ1は1歳9月で100%、メモリ2は2歳11月で100%、メモリ3は3歳3月で100%、メモリ4は3歳9月で100%、メモリ5は4歳5月で100%。メモリ6は4歳5月時点で84%（それ以降は原表に記載なし）。","bcMidComments":[{"range":"〜49","speed":"走りきる脚","stamina":"心配？"},{"range":"50〜69","speed":"そこそこの脚","stamina":"心配"},{"range":"70〜79","speed":"脚力は普通","stamina":"ぼちぼち"},{"range":"80〜89","speed":"良い脚","stamina":"あるほう"},{"range":"90〜94","speed":"かなりの脚力","stamina":"自信"},{"range":"95〜96","speed":"凄い脚力","stamina":"言うこと"},{"range":"97〜99","speed":"並外れた脚力","stamina":"一級品"},{"range":"100〜104","speed":"物凄い脚力","stamina":"一級品"},{"range":"105〜119","speed":"非凡な脚力","stamina":"飛びぬけ"},{"range":"120〜129","speed":"他の追随を","stamina":"心肺機能は特別"},{"range":"130〜","speed":"空を飛ぶような","stamina":"いくらでも"}],"bcMidNote":"BC登録時の中段コメントの数値範囲。書き起こしではコメント文は文頭のみのため、全文は原表（X投稿の画像）を参照すること。","upperBandsNote":"入厩時上段コメントの合計帯は既存の bands と同じ（300以上 馬神、275以上 後光、250以上 時代を築く、230〜249 時代を代表、180〜229 海外も視野）。条件は変えない。","example":"最大スピード200・メモリ1：コメ変化85%は170、あと一息75%は150、蓋100%は200。最大スピード150・メモリ2：蓋90%は135、2歳9月98%は147。"}};
 
 var COMMENTS = FALLBACK_COMMENTS;
 var RANKS = FALLBACK_RANKS;
@@ -280,6 +280,10 @@ function arrivalBounds(mem, kind) {
 }
 /* 測定メモの対象（スピード／スタミナ）。対象の指定がない旧記録はスピードとして扱う。 */
 var MEASURE_TARGETS = ['スピード', 'スタミナ'];
+/* 調教の種類（測定メモ用）。ダート一杯はスタミナ測定（ダート測定法）に使う。
+   芝一杯はスピード測定の実測例で使われる。馬なり・強めは上昇が確定ではないため、
+   この一覧には入れない（記録したい場合は「その他」＋メモで残す）。 */
+var MEASURE_TRAINING_TYPES = ['芝一杯', 'ダート一杯', 'ダート併せ', '鬼ダート', '鬼ウッド', 'その他'];
 function measureTargetOf(e) {
 return (e && e.target === 'スタミナ')? 'スタミナ': 'スピード';
 }
@@ -308,10 +312,10 @@ var lo = Math.max(a[0], b[0]);
 var hi = (a[1] === null)? b[1]: (b[1] === null? a[1]: Math.min(a[1], b[1]));
 return [lo, hi];
 }
-/* 測定メモ（調教記録）から、対象（スピード／スタミナ）ごとに最大値の候補範囲を絞る。
+/* 測定メモ（調教記録）から、スピードの最大値の候補範囲を絞る（コメント到達率方式）。
 同じ対象の記録が複数あれば、各記録の候補範囲の重なり（共通部分）を取る。
 重なりが無くなれば conflict=true とし、数値範囲は出さない。
-スタミナ側は、スピード側の到達率の考え方をそのまま当てはめたもの（参考・未検証）。
+スタミナ側はコメント方式を廃止し、ダート測定法（narrowStaminaDart）を使う。
 base は初期候補範囲 [min, max]（max は null 可）で、食い違いの注記に使う。
 返り値：null（対象の記録なし）または
 {target, entries:[{kind, arrival, stage, trainingCount, rank, range}], range, conflict, mem, notes[]}。 */
@@ -363,13 +367,62 @@ notes.push('初期候補範囲（' + fmtRange(base) + '）と食い違う参考�
 notes.push('初期候補範囲より上限が絞れた参考（' + fmtRange(base) + ' → 上限 ' + range[1] + '）。確定値ではない。');
 }
 }
-if (isSt) {
-notes.push('スタミナ側の絞り込みは、スピード側の到達率の考え方をそのまま当てはめたもの（参考・未検証）。スタミナ側はスピード側ほど裏付けがありません。');
-}
 return { target: target, entries: entries, range: range, conflict: conflict, mem: mem, notes: notes};
 }
-
-/* ---------- 推定（参考・未検証） ---------- */
+/* ---------- ダート調教によるスタミナ測定（ユーザー検証・2026-11-15調査） ---------- */
+/* 入厩直後のSTは、成長タイプ（メモリ）に関係なく最大値のおよそ50％とされる。
+   入厩直後のSTランクを記録し、ダート一杯を1本ずつ行って、STランクが初めて
+   変わるまでの本数nを数える。入厩時ST初期値＝境界値T−n（Tは変わった先の
+   ランクの下限：D＝55、C＝70、B＝85、A＝100）。最大ST候補＝2×初期値 または
+   2×初期値＋1 の2つ。BC登録の4コメントはスピード到達率の指標で、スタミナに
+   読み替える根拠は確認できなかったため、コメントによるST絞り込みは廃止した。
+   出典：appligame「久しぶりに能力測定の話①」（2023-02-15）、たかな channel
+   動画（2026-03-20）、appligame「能力測定とかの雑記①」（2019-11-20）。
+   すべてユーザー検証による推定・未確定。数値は断定しない。
+   入厩時STランクは、測定メモの中で「入厩前」以外で最初にSTランクが記録された
+   記録のものを入厩直後（未調教）の値として使う。
+   返り値：null（測定に使える記録なし）または
+   {target:'スタミナ', method:'dart', fromRank, toRank, count, initial,
+    candidates:[a,b]（未変化・本数不明のときは null）, pending, notes[]}。 */
+var ST_RANK_ORDER = ['E', 'D', 'C', 'B', 'A'];
+var ST_RANK_MIN = { D: 55, C: 70, B: 85, A: 100 };
+function narrowStaminaDart(rec, base) {
+var log = (rec && Array.isArray(rec.measureLog))? rec.measureLog: [];
+var baseIdx = -1, fromRank = '';
+for (var i = 0; i < log.length; i++) {
+var e0 = log[i];
+if (e0 && e0.stRank && e0.stage!== '入厩前') { baseIdx = i; fromRank = e0.stRank; break;}
+}
+if (baseIdx < 0) return null;
+var hasDart = false;
+for (var j = baseIdx + 1; j < log.length; j++) {
+var e = log[j];
+if (!e || e.trainingType!== 'ダート一杯') continue;
+hasDart = true;
+if (!e.stRank) continue;
+if (ST_RANK_ORDER.indexOf(e.stRank) <= ST_RANK_ORDER.indexOf(fromRank)) continue;
+var notes = [];
+var n = e.trainingCount;
+if (n === null || n === undefined || !Number.isInteger(n) || n <= 0) {
+notes.push('ダート一杯でSTランクが ' + fromRank + '→' + e.stRank + ' に変わった記録はありますが、その記録の調教本数が入っていないため、最大ST候補は出せません（参考・未検証）。');
+return { target: 'スタミナ', method: 'dart', fromRank: fromRank, toRank: e.stRank, count: null, initial: null, candidates: null, pending: false, notes: notes};
+}
+var initial = ST_RANK_MIN[e.stRank] - n;
+if (initial < 0) {
+notes.push('計算上の入厩時ST初期値が0未満になりました。記録の内容（本数・ランク）を確認してください（参考・未検証）。');
+return { target: 'スタミナ', method: 'dart', fromRank: fromRank, toRank: e.stRank, count: n, initial: null, candidates: null, pending: false, notes: notes};
+}
+var candidates = [initial * 2, initial * 2 + 1];
+notes.push('入厩直後のスタミナは最大値のおよそ50％とされるため、最大STは初期値の2倍前後の2候補まで絞れます（ユーザー検証による推定・未確定）。');
+if (base && (candidates[1] < base[0] || (base[1]!== null && candidates[0] > base[1]))) {
+notes.push('初期候補範囲（潜在ST ' + fmtRange(base) + '）と食い違う参考。どちらかの読み・条件が未確定の可能性があります（参考・未検証）。');
+}
+return { target: 'スタミナ', method: 'dart', fromRank: fromRank, toRank: e.stRank, count: n, initial: initial, candidates: candidates, pending: false, notes: notes};
+}
+if (!hasDart) return null;
+return { target: 'スタミナ', method: 'dart', fromRank: fromRank, toRank: '', count: null, initial: null, candidates: null, pending: true,
+notes: ['ダート測定：入厩時ST ' + fromRank + ' は記録済みですが、ダート一杯でSTランクがまだ変わっていないため、最大ST候補はまだ出せません。ランクが初めて変わるまでの本数を記録してください（参考・未検証）。']};
+}
 function fmtRange(r) {
 if (!r) return '—';
 return r[1] === null? r[0] + '以上・上限未確定': r[0] + '〜' + r[1];
@@ -413,7 +466,7 @@ if (s[1]!== null) t[0] = Math.max(t[0], out.sumMin - s[1]);
 out.sp = s; out.st = t;
 /* 測定メモによる絞り込み（参考・未検証）。数値は断定しない。 */
 out.narrowSp = narrowByTarget(rec, 'スピード', s);
-out.narrowSt = narrowByTarget(rec, 'スタミナ', t);
+out.narrowSt = narrowStaminaDart(rec, t);
 /* 入厩直後のスタミナは最大値の半分とされる（ユーザー検証による推定・共有情報。参考・未検証）。
    入厩時のSTランクだけで育成後のSTを断定しない。 */
 if (RANKS.entryStamina && ((rec.analysisTab && rec.analysisTab.indexOf('入厩前') >= 0) || rec.stRank === 'D')) {
@@ -1127,25 +1180,37 @@ html += '<p>SP＋ST合計の候補範囲（参考）：' + esc(fmtRange([est.sum
 if (est.bands && est.bands.length) html += '<p>合計範囲と重なるタイトル帯（参考・未検証）：' + esc(est.bands.join('／')) + '</p>';
 if (est.special && est.special.length) html += '<p>後光・馬神（参考・可能性のみ、確定ではない）：' + esc(est.special.join('／')) + '</p>';
 if (est.phraseComments && est.phraseComments.length) html += '<p>解析コメントの文言（ゲーム内で表示されたコメント）：' + esc(est.phraseComments.join('／')) + '</p>';
-/* 測定メモによる絞り込み（参考・未検証）。数値は断定しない。 */
+/* 測定メモによる絞り込み（参考・未検証）。数値は断定しない。
+   SPは測定用コメントの到達率方式、STはダート調教による測定法。 */
 if (est.narrowSp || est.narrowSt) {
 html += '<h3>測定による絞り込み（参考・未検証）</h3>';
 html += '<p class="note">上の「潜在SP候補／潜在ST候補」が初期候補（入厩前後のランクから）。ここは調教記録（測定メモ）による絞り込み後の候補です。すべてユーザー検証による推定・未確定で、確定値ではありません。</p>';
-[est.narrowSp, est.narrowSt].forEach(function (nw) {
-if (!nw) return;
-var ab = (nw.target === 'スタミナ')? 'ST': 'SP';
+if (est.narrowSp) {
+var nw = est.narrowSp;
 nw.entries.forEach(function (en) {
-var meta = [en.stage, (en.trainingCount === null || en.trainingCount === undefined? '': '調教' + en.trainingCount + '本時点'), (en.rank? ab + 'ランク ' + en.rank: '')].filter(function (x) { return x;}).join('・');
+var meta = [en.stage, (en.trainingCount === null || en.trainingCount === undefined? '': '調教' + en.trainingCount + '本時点'), (en.rank? 'SPランク ' + en.rank: '')].filter(function (x) { return x;}).join('・');
 html += '<p>測定用コメント：' + esc(en.kind) + (en.arrival? '（到達率' + esc(en.arrival) + 'の参考）': '（到達率の区切りは未確認）') + (meta? '（' + esc(meta) + '）': '') + '</p>';
 });
-if (nw.range) html += '<p>潜在' + ab + 'の候補（測定による絞り込み・参考）：' + esc(fmtRange(nw.range)) + '</p>';
+if (nw.range) html += '<p>潜在SPの候補（測定による絞り込み・参考）：' + esc(fmtRange(nw.range)) + '</p>';
 nw.notes.forEach(function (n) { html += '<p class="note">' + esc(n) + '</p>';});
-});
+}
+if (est.narrowSt) {
+var dw = est.narrowSt;
+if (dw.candidates) {
+html += '<p>ダート測定（スタミナ）：入厩時ST ' + esc(dw.fromRank) + ' → ダート一杯 ' + dw.count + '本で ' + esc(dw.toRank) + ' に変化。入厩時ST初期値 ' + dw.initial + '（参考）</p>';
+html += '<p>最大ST候補（ダート測定による絞り込み・参考・未検証）：' + dw.candidates[0] + '／' + dw.candidates[1] + '</p>';
+} else if (dw.toRank) {
+html += '<p>ダート測定（スタミナ）：入厩時ST ' + esc(dw.fromRank) + ' → ダート一杯で ' + esc(dw.toRank) + ' に変化（本数の記録なし）</p>';
+} else {
+html += '<p>ダート測定（スタミナ）：入厩時ST ' + esc(dw.fromRank) + '（まだランクが変わっていません）</p>';
+}
+dw.notes.forEach(function (n) { html += '<p class="note">' + esc(n) + '</p>';});
+}
 }
 /* 測定メモの一覧（入厩前／入厩後の記録。調教本数・変わった内容つき） */
 if (rec.measureLog && rec.measureLog.length) {
   html += '<h3>測定メモ（調教の記録）</h3><ul>' + rec.measureLog.map(function (e) {
-    return '<li>' + esc([e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</li>';
+    return '<li>' + esc([e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), e.trainingType || '', (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</li>';
   }).join('') + '</ul>';
 }
 }
@@ -1235,7 +1300,7 @@ function renderMeasureLogList() {
   pendingMeasureLog.forEach(function (e, idx) {
     var div = document.createElement('div');
     div.className = 'manual-row';
-    div.innerHTML = '<p>' + esc([e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</p>';
+    div.innerHTML = '<p>' + esc([e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), e.trainingType || '', (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</p>';
     var del = document.createElement('button');
     del.type = 'button'; del.textContent = 'この測定メモを削除'; del.className = 'danger';
     del.addEventListener('click', function () { pendingMeasureLog.splice(idx, 1); renderMeasureLogList(); renderResult(currentFormRecord()); });
@@ -1248,6 +1313,7 @@ function addMeasureLogEntry() {
     at: $('ml-at').value.trim(),
     stage: $('ml-stage').value,
  target: $('ml-target').value || 'スピード',
+    trainingType: $('ml-training-type').value || '',
     trainingCount: parseTrainingCount($('ml-training').value),
     spRank: $('ml-sp').value || '',
     stRank: $('ml-st').value || '',
@@ -1255,17 +1321,42 @@ function addMeasureLogEntry() {
     changed: $('ml-changed').value || '',
     note: $('ml-note').value.trim()
   };
-  if (!entry.stage && entry.trainingCount === null && !entry.spRank && !entry.stRank && !entry.measure && !entry.changed && !entry.note && !entry.at) {
+  if (!entry.stage && entry.trainingCount === null && !entry.spRank && !entry.stRank && !entry.measure && !entry.changed && !entry.note && !entry.at && !entry.trainingType) {
     $('ml-msg').textContent = '測定メモが空です。何か1つ入れてください。';
     return;
   }
   pendingMeasureLog.push(entry);
-  $('ml-at').value = ''; $('ml-training').value = ''; $('ml-sp').value = ''; $('ml-st').value = '';
- $('ml-target').value = 'スピード';
-  $('ml-measure').value = ''; $('ml-changed').value = ''; $('ml-note').value = '';
-  $('ml-msg').textContent = pendingMeasureLog.length + '件目の測定メモを追加しました。';
+  /* 入力を減らすため、時期・対象・調教の種類・本数・ランク・測定用コメントは
+     次の記録に引き継ぐ（変わった内容とメモだけ消す）。段階が「入厩前」だった
+     場合は、次は「入厩後」を初期値にする。 */
+  if (entry.stage === '入厩前') $('ml-stage').value = '入厩後';
+  $('ml-changed').value = ''; $('ml-note').value = '';
+  syncAllBtnGroups();
+  $('ml-msg').textContent = pendingMeasureLog.length + '件目の測定メモを追加しました。時期・本数・ランクなどは次の記録に引き継いでいます。';
   renderMeasureLogList();
   renderResult(currentFormRecord());
+}
+/* ---------- 測定メモ入力のボタングループ（タップ選択） ---------- */
+/* hidden input の値を、ボタンのタップで切り替える。選ばれているボタンには
+   selected クラスを付ける。手入力をできるだけ省くための仕組み。 */
+var btnGroups = [];
+function syncBtnGroup(group) {
+  if (!group.box || !group.box.querySelectorAll) return;
+  group.box.querySelectorAll('button[data-val]').forEach(function (b) {
+    if (b.getAttribute('data-val') === group.input.value) b.classList.add('selected');
+    else b.classList.remove('selected');
+  });
+}
+function syncAllBtnGroups() { btnGroups.forEach(syncBtnGroup); }
+function initBtnGroup(boxId, inputId) {
+  var box = $(boxId), input = $(inputId);
+  if (!box || !input) return;
+  var group = { box: box, input: input };
+  btnGroups.push(group);
+  if (box.querySelectorAll) box.querySelectorAll('button[data-val]').forEach(function (b) {
+    b.addEventListener('click', function () { input.value = b.getAttribute('data-val'); syncBtnGroup(group); });
+  });
+  syncBtnGroup(group);
 }
 function renderList() {
 $('count').textContent = String(records.length);
@@ -1287,11 +1378,11 @@ li.innerHTML = '<p class="name">' + esc(r.name) + '</p>'
 + ((r.runningStyle || r.distance) ? '\n脚質 ' + esc(r.runningStyle || '—') + '／距離 ' + esc(r.distance || '—') + '／適応力 ' + esc(r.adaptability || '—') : '')
 + (r.analysisTime ? '\n解析時期 ' + esc(r.analysisTime) + '（' + esc(r.analysisTab || '') + '）' : '')
 + ((r.trainingCount !== null && r.trainingCount !== undefined) ? '\n調教本数 ' + esc(String(r.trainingCount)) + '本（将来の測定用メモ）' : '')
-+ ((r.measureLog && r.measureLog.length) ? '\n測定メモ ' + r.measureLog.length + '件：' + esc(r.measureLog.map(function (e) { return [e.stage, (e.target === 'スタミナ'? 'ST対象': 'SP対象'), (e.trainingCount === null || e.trainingCount === undefined ? '' : e.trainingCount + '本'), e.measure || '', e.changed || ''].filter(function (x) { return x; }).join(' '); }).join(' → ')) : '')
++ ((r.measureLog && r.measureLog.length) ? '\n測定メモ ' + r.measureLog.length + '件：' + esc(r.measureLog.map(function (e) { return [e.stage, (e.target === 'スタミナ'? 'ST対象': 'SP対象'), (e.trainingCount === null || e.trainingCount === undefined ? '' : e.trainingCount + '本'), e.trainingType || '', e.measure || '', e.changed || ''].filter(function (x) { return x; }).join(' '); }).join(' → ')) : '')
 + (est.sp? '\n潜在SP（参考）' + esc(fmtRange(est.sp)) + '／潜在ST（参考）' + esc(fmtRange(est.st)): '')
 + (est.narrowSp && est.narrowSp.range? '\n測定による絞り込み SP（参考・未検証）' + esc(fmtRange(est.narrowSp.range)): '')
-+ (est.narrowSt && est.narrowSt.range? '\n測定による絞り込み ST（参考・未検証）' + esc(fmtRange(est.narrowSt.range)): '')
-+ (((est.narrowSp && est.narrowSp.conflict) || (est.narrowSt && est.narrowSt.conflict))? '\n測定メモの記録同士が食い違っています（参考・未検証）': '')
++ (est.narrowSt && est.narrowSt.candidates? '\nダート測定による最大ST候補（参考・未検証）' + est.narrowSt.candidates[0] + '／' + est.narrowSt.candidates[1]: '')
++ ((est.narrowSp && est.narrowSp.conflict)? '\n測定メモの記録同士が食い違っています（参考・未検証）': '')
 + (cats.length? '\n' + esc(cats.join('\n')): '')
 + (cls.unclassified.length? '\n未分類 ' + cls.unclassified.length + '件あり': '')
 + (r.memo? '\nメモ：' + esc(r.memo): '') + '</p>';
@@ -2514,6 +2605,7 @@ $('horse-form').reset();
 pendingManual = [];
 pendingMeasureLog = [];
 renderMeasureLogList();
+syncAllBtnGroups();
 $('ml-msg').textContent = '';
 $('save-btn').textContent = '判定して登録';
 $('cancel-edit').hidden = true;
@@ -2552,6 +2644,34 @@ $(id).addEventListener('change', function () { renderResult(currentFormRecord())
 
 $('paste-btn').addEventListener('click', fillFormFromPaste);
 $('ml-add').addEventListener('click', addMeasureLogEntry);
+/* 測定メモのタップ入力：ボタングループ、調教本数のステッパーと候補ボタン、
+   時期の「前回を使う」ボタン。 */
+initBtnGroup('ml-stage-group', 'ml-stage');
+initBtnGroup('ml-target-group', 'ml-target');
+initBtnGroup('ml-training-type-group', 'ml-training-type');
+initBtnGroup('ml-sp-group', 'ml-sp');
+initBtnGroup('ml-st-group', 'ml-st');
+initBtnGroup('ml-measure-group', 'ml-measure');
+initBtnGroup('ml-changed-group', 'ml-changed');
+function setTrainingCount(n) {
+  if (n === null || n === undefined || isNaN(n)) n = 0;
+  if (n < 0) n = 0;
+  $('ml-training').value = String(n);
+}
+if ($('ml-training-minus')) $('ml-training-minus').addEventListener('click', function () {
+  var v = parseTrainingCount($('ml-training').value);
+  setTrainingCount((v === null ? 0 : v) - 1);
+});
+if ($('ml-training-plus')) $('ml-training-plus').addEventListener('click', function () {
+  var v = parseTrainingCount($('ml-training').value);
+  setTrainingCount((v === null ? 0 : v) + 1);
+});
+if ($('ml-training-chips')) $('ml-training-chips').querySelectorAll('button[data-count]').forEach(function (b) {
+  b.addEventListener('click', function () { setTrainingCount(parseInt(b.getAttribute('data-count'), 10)); });
+});
+if ($('ml-at-copy')) $('ml-at-copy').addEventListener('click', function () {
+  if (pendingMeasureLog.length) $('ml-at').value = pendingMeasureLog[pendingMeasureLog.length - 1].at || '';
+});
 
 /* 繁殖計画の登録・編集（ステップ1）。父馬・母馬は名前のテキスト入力のみ。 */
 $('plan-form').addEventListener('submit', function (e) {
@@ -3035,6 +3155,7 @@ if (e.spRank && !RANKS.ranges[e.spRank]) return false;
 if (e.stRank && !RANKS.ranges[e.stRank]) return false;
 if (e.measure && MEASURE_KINDS.indexOf(e.measure) < 0) return false;
 if (e.target && MEASURE_TARGETS.indexOf(e.target) < 0) return false;
+if (e.trainingType && MEASURE_TRAINING_TYPES.indexOf(e.trainingType) < 0) return false;
 if (e.changed && MEASURE_CHANGE_KINDS.indexOf(e.changed) < 0) return false;
 if (e.at !== undefined && typeof e.at !== 'string') return false;
 if (e.note !== undefined && typeof e.note !== 'string') return false;
