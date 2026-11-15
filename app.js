@@ -2420,6 +2420,31 @@ function matingTheoryPreviewHtml(pv) {
 var PARTNER_RECO_LIMIT = 20;
 var PARTNER_RECO_LABELS = ['至高の配合', '奇跡の配合', '超完璧な配合', '完璧な配合', '見事な配合', '面白い配合', 'よくできた配合'];
 var partnerRecoCache = { key: '', result: null };
+/* 目標から探す：目標にできる配合理論（優先順）。key は
+   checkMatingTheories の返り値のキー名と対応する。 */
+var THEORY_GOALS = [
+  { key: 'supreme', label: '至高の配合' },
+  { key: 'miracle', label: '奇跡の配合' },
+  { key: 'superPerfect', label: '超完璧な配合' },
+  { key: 'perfect', label: '完璧な配合' },
+  { key: 'migoto', label: '見事な配合' },
+  { key: 'omoshiroi', label: '面白い配合' },
+  { key: 'yokudekita', label: 'よくできた配合' }
+];
+function theoryGoalLabel(key) {
+  for (var i = 0; i < THEORY_GOALS.length; i++) if (THEORY_GOALS[i].key === key) return THEORY_GOALS[i].label;
+  return '';
+}
+/* 判定結果 th に、目標の理論 key が付いているか。 */
+function theoryHitForKey(th, key) {
+  if (!th || !key) return false;
+  var t = th[key];
+  return !!(t && t.hit);
+}
+/* おすすめの相手で選ばれている目標の理論（'' は指定なし）。
+   計画フォームと世代フォームで共通。目標を選ぶと、その理論が付く
+   相手だけをおすすめに出す（馬を固定するモード）。 */
+var recoTargetTheory = '';
 /* おすすめ相手の絞り込み条件（計画フォーム・世代フォームで共通）。
    dist は「この距離を走れる相手」の対象距離（m の数値文字列）。
    factor／hibon／talent は部分一致、growth は完全一致で、候補（DBの馬）の
@@ -2509,14 +2534,18 @@ function theoryShortReasons(th) {
    reasons: [{label, reason}], dangerous}。
    filters（任意・既定は recoFilters）で DB候補を絞り込める。返り値の
    total は絞り込み後の件数で、unfilteredTotal に絞り込み前の件数、
-   filtersActive に条件の有無が入る。絞り込み中は自家生産馬を外す。 */
-function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey, filters) {
-  if (!fixedHorse) return { total: 0, items: [], unfilteredTotal: 0, filtersActive: false };
+   filtersActive に条件の有無が入る。絞り込み中は自家生産馬を外す。
+   targetKey（任意・THEORY_GOALS の key）を指定すると、その理論が付く
+   相手だけを出す（目標から探す・馬を固定するモード）。返り値には
+   targetKey／targetLabel が入る。 */
+function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey, filters, targetKey) {
+  if (!fixedHorse) return { total: 0, items: [], unfilteredTotal: 0, filtersActive: false, targetKey: '', targetLabel: '' };
   filters = filters || recoFilters;
+  targetKey = targetKey || '';
   var fOn = recoFiltersActive(filters);
   var ownCount = (typeof ownHorses !== 'undefined' && Array.isArray(ownHorses)) ? ownHorses.length : 0;
   var key = String(fixedKey || '') + '|' + fixedRole + '|' + String(fixedHorse.n || '') + '|own' + ownCount +
-    '|f' + JSON.stringify(filters);
+    '|f' + JSON.stringify(filters) + '|t' + targetKey;
   if (partnerRecoCache.key === key && partnerRecoCache.result) return partnerRecoCache.result;
   var candidateRole = fixedRole === 'sire' ? 'dam' : 'sire';
   var found = [];
@@ -2526,6 +2555,7 @@ function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey, filters) {
     var dam = fixedRole === 'sire' ? candPed : fixedHorse;
     var th = checkMatingTheories(sire, dam);
     if (!th || !th.anyHit) return;
+    if (targetKey && !theoryHitForKey(th, targetKey)) return;
     var reasons = theoryShortReasons(th);
     if (!reasons.length) return;
     var rank = theoryBestRank(th);
@@ -2564,7 +2594,8 @@ function findPartnerRecommendations(fixedHorse, fixedRole, fixedKey, filters) {
     return (a.dbIndex || 0) - (b.dbIndex || 0);
   });
   var result = { total: kept.length, items: kept.slice(0, PARTNER_RECO_LIMIT),
-    unfilteredTotal: found.length, filtersActive: fOn };
+    unfilteredTotal: found.length, filtersActive: fOn,
+    targetKey: targetKey, targetLabel: theoryGoalLabel(targetKey) };
   partnerRecoCache = { key: key, result: result };
   return result;
 }
@@ -2594,7 +2625,9 @@ function recoFilterControlsHtml() {
 }
 /* 絞り込み条件の入力に変更処理をつなぐ。変えたら recoFilters を更新して
    onRefresh（プレビューの出し直し）を呼ぶ。テキスト欄は change（確定時）
-   で拾い、入力中のフォーカスが外れないようにする。 */
+   で拾い、入力中のフォーカスが外れないようにする。
+   目標の理論の選択（data-reco-target）もここでつなぐ。変えたら
+   recoTargetTheory を更新して同じ onRefresh を呼ぶ。 */
 function attachRecoFilterControls(container, onRefresh) {
   if (!container || !container.querySelectorAll || !onRefresh) return;
   container.querySelectorAll('[data-reco-filter]').forEach(function (el) {
@@ -2604,20 +2637,41 @@ function attachRecoFilterControls(container, onRefresh) {
       onRefresh();
     });
   });
+  container.querySelectorAll('[data-reco-target]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      recoTargetTheory = String(el.value || '');
+      onRefresh();
+    });
+  });
+}
+/* 目標の理論の選択欄（おすすめ一覧の上に常時表示する）。
+   選ぶと、その理論が付く相手だけがおすすめに出る。 */
+function recoTargetControlsHtml() {
+  return '<div class="reco-target"><label>目標の理論で絞る（目標から探す）<select data-reco-target>' +
+    '<option value="">指定なし（理論が付く相手すべて）</option>' +
+    THEORY_GOALS.map(function (g) {
+      return '<option value="' + g.key + '"' + (recoTargetTheory === g.key ? ' selected' : '') + '>' + g.label + '</option>';
+    }).join('') + '</select></label></div>';
 }
 /* おすすめ一覧のHTML。候補はボタンになっていて、押すと相手として
    選ばれる（attachPartnerRecoButtons で実際の選択処理をつなぐ）。 */
 function partnerRecommendationsHtml(recos, missingRole) {
   var roleLabel = missingRole === 'sire' ? '父馬' : '母馬';
+  var targetLabel = recos && recos.targetLabel ? recos.targetLabel : '';
   var html = '<div class="partner-reco"><h4>おすすめの' + roleLabel + '（参考・未検証）</h4>';
+  html += recoTargetControlsHtml();
   html += recoFilterControlsHtml();
   if (!recos || !recos.total) {
-    html += recos && recos.filtersActive
-      ? '<p class="note">この絞り込み条件では、理論が付く相手は見つかりませんでした（絞り込み前は' + recos.unfilteredTotal + '件）。条件をゆるめてみてください（参考・未検証）。</p></div>'
-      : '<p class="note">理論が付く相手は見つかりませんでした（参考・未検証）。</p></div>';
+    if (recos && recos.filtersActive) {
+      html += '<p class="note">この絞り込み条件では、' + (targetLabel ? '「' + targetLabel + '」が付く' : '理論が付く') + '相手は見つかりませんでした（絞り込み前は' + recos.unfilteredTotal + '件）。条件をゆるめてみてください（参考・未検証）。</p></div>';
+    } else if (targetLabel) {
+      html += '<p class="note">「' + targetLabel + '」が付く相手は見つかりませんでした（参考・未検証）。</p></div>';
+    } else {
+      html += '<p class="note">理論が付く相手は見つかりませんでした（参考・未検証）。</p></div>';
+    }
     return html;
   }
-  html += '<p class="note">理論が付く相手が' + recos.total + '件見つかりました（上位' + recos.items.length + '件を表示）。' +
+  html += '<p class="note">' + (targetLabel ? '「' + targetLabel + '」が付く相手が' : '理論が付く相手が') + recos.total + '件見つかりました（上位' + recos.items.length + '件を表示）。' +
     (recos.filtersActive ? '絞り込み中の件数です（絞り込み前は' + recos.unfilteredTotal + '件）。' : '') +
     'タップすると' + roleLabel + 'に選ばれます。判定はユーザー検証による推定で、配合の効果を断定するものではありません。</p>';
   html += '<ul class="reco-list">';
@@ -2655,10 +2709,326 @@ function appendPartnerRecommendations(box, pv, keys, onPick, onRefresh) {
   var fixedHorse = fixedRole === 'sire' ? pv.sire : pv.dam;
   if (!fixedHorse) return;
   var fixedKey = fixedRole === 'sire' ? keys.sireKey : keys.damKey;
-  var recos = findPartnerRecommendations(fixedHorse, fixedRole, fixedKey);
+  var recos = findPartnerRecommendations(fixedHorse, fixedRole, fixedKey, recoFilters, recoTargetTheory);
   box.innerHTML += partnerRecommendationsHtml(recos, pv.missingRole);
   attachPartnerRecoButtons(box, function (item) { onPick(pv.missingRole, item); });
   attachRecoFilterControls(box, onRefresh);
+}
+/* ---------- 目標から探す（馬を固定しないペア探索） ---------- */
+/* 目標の理論を選ぶと、DBの馬同士＋自家生産馬を含む組み合わせの中から、
+   その理論が成立するペアを探す。すべて参考・未検証で、配合の効果を
+   断定しない。危険な配合だけのペアは出さない。
+   DB全頭のペアは約900万通りあり、1件ずつ checkMatingTheories で判定
+   すると重すぎるため、理論ごとに必要な条件で候補を先に絞る：
+   - 至高：同じ種牡馬の3×4×5クロスの配置と、クロスを構成する出現箇所の
+     因子の種類（6種類以上）を出現インデックスで先に確かめる。
+   - 奇跡・超完璧・完璧・見事：見事な配合の前提（父側 anc[4,7,11,14] の
+     親系統の多重集合＝母側 anc[0,5,8,12] の多重集合）でグループ化し、
+     完璧は8頭の親系統の和集合7種類以上、超完璧は8種類、奇跡はさらに
+     4×3クロスの名前一致をビットマスク・名前集合で先に確かめる。
+   - 面白い・よくできた：親系統のビットマスクの集合演算だけで数え、
+     表示する上位 THEORY_PAIR_LIMIT 件だけ checkMatingTheories で
+     判定して根拠を付ける。
+   事前条件は実データで全件判定と一致することを確認済み（DB同士：
+   至高0件／奇跡9件／超完璧315件／完璧1962件／見事7481件／
+   面白い2711316件／よくできた188397件）。結果は目標が同じ間キャッシュ
+   する。 */
+var THEORY_PAIR_LIMIT = 20;
+var theoryPairCache = { key: '', result: null };
+var theoryPoolCache = { key: '', pool: null };
+var lastTheoryPairs = null;
+/* ペア探索の候補プール。DB全頭＋自家生産馬を、血統で使う形（ped）と
+   事前絞り込みに使う特徴量にそろえたもの。特徴量：
+   maskEight（anc[0,5,8,12] の親系統ビットマスク）、maskSire4
+   （anc[4,7,11,14] の親系統ビットマスク）、sireKey／damKey（見事な
+   配合の多重集合キー）、crossSire（4×3クロスの父側4代前の正規化名の
+   集合）、crossDam（母側の母母父の正規化名）、sup（至高の出現情報：
+   正規化名→{gens, f3, f4, f5}。因子の数え方は foalAncestorOccurrences
+   と同じ：祖先名がDBの記録と完全一致すればその記録の因子1〜3、
+   一致しなければ出現箇所の因子1・2）。 */
+function theorySearchPool() {
+  var ownCount = (typeof ownHorses !== 'undefined' && Array.isArray(ownHorses)) ? ownHorses.length : 0;
+  var dbCount = (STALLIONS && Array.isArray(STALLIONS.horses)) ? STALLIONS.horses.length : 0;
+  var cacheKey = 'db' + dbCount + '|own' + ownCount;
+  if (theoryPoolCache.key === cacheKey && theoryPoolCache.pool) return theoryPoolCache.pool;
+  var pool = [];
+  if (!STALLIONS || !Array.isArray(STALLIONS.horses)) {
+    theoryPoolCache = { key: cacheKey, pool: pool };
+    return pool;
+  }
+  var bitOf = {};
+  function regPa(pa) { if (pa && bitOf[pa] === undefined) bitOf[pa] = Object.keys(bitOf).length; }
+  STALLIONS.horses.forEach(function (h) {
+    for (var i = 0; i < 15; i++) regPa(stallionAncestor(h, i).pa);
+  });
+  if (ownCount) {
+    ownHorses.forEach(function (o) {
+      var ped0 = ownHorsePedigree(o);
+      if (ped0) for (var i = 0; i < 15; i++) regPa(stallionAncestor(ped0, i).pa);
+    });
+  }
+  var nameToIdx = stallionNameToIndex();
+  function features(ped) {
+    function mask(idxs) {
+      var m = 0;
+      idxs.forEach(function (i) {
+        var pa = stallionAncestor(ped, i).pa;
+        if (pa && bitOf[pa] !== undefined) m |= (1 << bitOf[pa]);
+      });
+      return m;
+    }
+    function multiKey(idxs) {
+      return idxs.map(function (i) { return stallionAncestor(ped, i).pa || ''; })
+        .filter(function (x) { return x; }).sort().join('|');
+    }
+    var crossSire = {};
+    [2, 5, 9, 12].forEach(function (i) {
+      var nm = normalizeCrossName(stallionAncestor(ped, i).name || '');
+      if (nm) crossSire[nm] = true;
+    });
+    var sup = {};
+    for (var i = 0; i < 15; i++) {
+      var a = stallionAncestor(ped, i);
+      if (!a.name) continue;
+      var gen = CHILD_PEDIGREE_GEN[i] + 1;
+      if (gen < 3 || gen > 5) continue;
+      var nm2 = normalizeCrossName(a.name);
+      if (!nm2) continue;
+      var factors;
+      var idx = nameToIdx[a.name];
+      if (idx !== undefined && STALLIONS.horses[idx]) {
+        factors = distinctKinds([STALLIONS.horses[idx].f1, STALLIONS.horses[idx].f2, STALLIONS.horses[idx].f3]);
+      } else {
+        factors = distinctKinds([a.f1, a.f2]);
+      }
+      var e = sup[nm2] || (sup[nm2] = { gens: {}, f3: {}, f4: {}, f5: {} });
+      e.gens[gen] = true;
+      factors.forEach(function (f) { e['f' + gen][f] = true; });
+    }
+    return {
+      maskEight: mask([0, 5, 8, 12]),
+      maskSire4: mask([4, 7, 11, 14]),
+      sireKey: multiKey([4, 7, 11, 14]),
+      damKey: multiKey([0, 5, 8, 12]),
+      sireMulti: [4, 7, 11, 14].some(function (i) { return !!stallionAncestor(ped, i).pa; }),
+      damMulti: [0, 5, 8, 12].some(function (i) { return !!stallionAncestor(ped, i).pa; }),
+      crossSire: crossSire,
+      crossDam: normalizeCrossName(stallionAncestor(ped, 8).name || ''),
+      sup: sup
+    };
+  }
+  STALLIONS.horses.forEach(function (h, idx) {
+    pool.push({ ped: h, kind: 'db', dbIndex: idx, ownId: null, name: h.n || '',
+      badge: 'データベース／子系統 ' + (h.chi || '—'), sireOk: true, damOk: true, f: features(h) });
+  });
+  if (ownCount) {
+    ownHorses.forEach(function (o) {
+      var ped = ownHorsePedigree(o);
+      if (!ped) return;
+      pool.push({ ped: ped, kind: 'own', dbIndex: null, ownId: o.id, name: o.name || '',
+        badge: '自家生産馬（' + o.sex + '・' + o.generation + '代目／' + ownHorseOriginLabel(o) + '）',
+        sireOk: ownHorseEligibleFor('sire', o), damOk: ownHorseEligibleFor('dam', o), f: features(ped) });
+    });
+  }
+  theoryPoolCache = { key: cacheKey, pool: pool };
+  return pool;
+}
+/* 目標の理論が成立するペアを探す純粋な関数（DOMを使わない）。
+   返り値: {total, items, targetKey, targetLabel}。total は成立する
+   ペアの総数、items は上位 THEORY_PAIR_LIMIT 件（DBの並び順）。
+   item: {sire: {kind, dbIndex, ownId, name, badge}, dam: 同様,
+   rank, label, reasons, dangerous}。 */
+function findTheoryPairs(targetKey) {
+  var pool = theorySearchPool();
+  var ownCount = (typeof ownHorses !== 'undefined' && Array.isArray(ownHorses)) ? ownHorses.length : 0;
+  var dbCount = (STALLIONS && Array.isArray(STALLIONS.horses)) ? STALLIONS.horses.length : 0;
+  var cacheKey = String(targetKey || '') + '|db' + dbCount + '|own' + ownCount;
+  if (theoryPairCache.key === cacheKey && theoryPairCache.result) return theoryPairCache.result;
+  var total = 0;
+  var items = [];
+  function sameHorse(a, b) {
+    return a.kind === b.kind && (a.kind === 'db' ? a.dbIndex === b.dbIndex : a.ownId === b.ownId);
+  }
+  function consider(si, di) {
+    var s = pool[si], d = pool[di];
+    if (!s || !d || sameHorse(s, d)) return;
+    total++;
+    if (items.length >= THEORY_PAIR_LIMIT) return;
+    var th = checkMatingTheories(s.ped, d.ped);
+    if (!th || !theoryHitForKey(th, targetKey)) return;
+    var rank = theoryBestRank(th);
+    items.push({
+      sire: { kind: s.kind, dbIndex: s.dbIndex, ownId: s.ownId, name: s.name, badge: s.badge },
+      dam: { kind: d.kind, dbIndex: d.dbIndex, ownId: d.ownId, name: d.name, badge: d.badge },
+      rank: rank, label: PARTNER_RECO_LABELS[rank], reasons: theoryShortReasons(th),
+      dangerous: !!(th.dangerous && th.dangerous.hit)
+    });
+  }
+  function popcnt(x) { var c = 0; while (x) { x &= x - 1; c++; } return c; }
+  var sires = [], dams = [];
+  pool.forEach(function (c, i) { if (c.sireOk) sires.push(i); if (c.damOk) dams.push(i); });
+  if (targetKey === 'supreme') {
+    var s45 = {}, d3 = {}, s3 = {}, d45 = {};
+    function pushIdx(map, name, i) { (map[name] = map[name] || []).push(i); }
+    pool.forEach(function (c, i) {
+      Object.keys(c.f.sup).forEach(function (name) {
+        var e = c.f.sup[name];
+        if (c.sireOk && e.gens[4] && e.gens[5]) pushIdx(s45, name, i);
+        if (c.damOk && e.gens[3]) pushIdx(d3, name, i);
+        if (c.sireOk && e.gens[3]) pushIdx(s3, name, i);
+        if (c.damOk && e.gens[4] && e.gens[5]) pushIdx(d45, name, i);
+      });
+    });
+    function factorUnionOk(sE, dE, pattern) {
+      var kinds = {};
+      var src = pattern === 'A' ? [dE.f3, sE.f4, sE.f5] : [sE.f3, dE.f4, dE.f5];
+      src.forEach(function (set) { Object.keys(set).forEach(function (k) { kinds[k] = true; }); });
+      return Object.keys(kinds).length >= 6;
+    }
+    var seen = {};
+    Object.keys(s45).forEach(function (name) {
+      (d3[name] || []).forEach(function (di) {
+        s45[name].forEach(function (si) {
+          var k = si + ':' + di;
+          if (si === di || seen[k]) return;
+          if (!factorUnionOk(pool[si].f.sup[name], pool[di].f.sup[name], 'A')) return;
+          seen[k] = true;
+          consider(si, di);
+        });
+      });
+    });
+    Object.keys(d45).forEach(function (name) {
+      (s3[name] || []).forEach(function (si) {
+        d45[name].forEach(function (di) {
+          var k = si + ':' + di;
+          if (si === di || seen[k]) return;
+          if (!factorUnionOk(pool[si].f.sup[name], pool[di].f.sup[name], 'B')) return;
+          seen[k] = true;
+          consider(si, di);
+        });
+      });
+    });
+  } else if (targetKey === 'migoto' || targetKey === 'perfect' ||
+      targetKey === 'superPerfect' || targetKey === 'miracle') {
+    var damsByKey = {};
+    dams.forEach(function (di) {
+      var d = pool[di];
+      if (!d.f.damMulti) return;
+      (damsByKey[d.f.damKey] = damsByKey[d.f.damKey] || []).push(di);
+    });
+    sires.forEach(function (si) {
+      var s = pool[si];
+      if (!s.f.sireMulti) return;
+      var group = damsByKey[s.f.sireKey] || [];
+      group.forEach(function (di) {
+        var d = pool[di];
+        if (sameHorse(s, d)) return;
+        if (targetKey !== 'migoto') {
+          var u = popcnt(s.f.maskEight | d.f.maskEight);
+          if (targetKey === 'perfect' && u < 7) return;
+          if (targetKey === 'superPerfect' && u !== 8) return;
+          if (targetKey === 'miracle' && (u < 7 || !d.f.crossDam || !s.f.crossSire[d.f.crossDam])) return;
+        }
+        consider(si, di);
+      });
+    });
+  } else if (targetKey === 'omoshiroi') {
+    sires.forEach(function (si) {
+      var s = pool[si];
+      dams.forEach(function (di) {
+        var d = pool[di];
+        if (sameHorse(s, d)) return;
+        if (popcnt(s.f.maskEight | d.f.maskEight) >= 7) consider(si, di);
+      });
+    });
+  } else if (targetKey === 'yokudekita') {
+    sires.forEach(function (si) {
+      var s = pool[si];
+      if (!s.f.sireMulti) return;
+      dams.forEach(function (di) {
+        var d = pool[di];
+        if (!d.f.damMulti || s.f.sireKey === d.f.damKey) return;
+        if (popcnt(s.f.maskSire4 & d.f.maskEight) >= 3) consider(si, di);
+      });
+    });
+  }
+  var result = { total: total, items: items, targetKey: targetKey, targetLabel: theoryGoalLabel(targetKey) };
+  theoryPairCache = { key: cacheKey, result: result };
+  return result;
+}
+/* 目標から探したペアの一覧のHTML。ペアはボタンになっていて、押すと
+   計画フォームの父馬・母馬にセットされる（保存はされない）。 */
+function theoryPairsHtml(result) {
+  if (!result) return '';
+  var html = '<div class="goal-pairs"><h4>「' + esc(result.targetLabel) + '」が成立するペア（参考・未検証）</h4>';
+  if (!result.total) {
+    html += '<p class="note">「' + esc(result.targetLabel) + '」が成立するペアは見つかりませんでした（参考・未検証）。</p></div>';
+    return html;
+  }
+  html += '<p class="note">ペアが' + result.total + '件見つかりました' +
+    (result.total > result.items.length ? '（上位' + result.items.length + '件のみ表示）' : '') +
+    '。タップすると計画フォームの父馬・母馬にセットされます（その場では保存されません）。判定はユーザー検証による推定で、配合の効果を断定するものではありません。</p>';
+  html += '<ul class="reco-list">';
+  result.items.forEach(function (it, i) {
+    html += '<li><button type="button" class="reco-btn" data-goal-pair="' + i + '">' +
+      '<span class="reco-name">父：' + esc(it.sire.name) + ' × 母：' + esc(it.dam.name) + '</span>' +
+      '<span class="reco-meta">父：' + esc(it.sire.badge) + '／母：' + esc(it.dam.badge) + '</span>' +
+      '<span class="reco-theory">' + esc(it.label) + '</span>' +
+      '<span class="reco-reason">' + esc(it.reasons.map(function (r) { return r.label + '：' + r.reason; }).join('／')) + '</span>' +
+      (it.dangerous ? '<span class="reco-warn">危険な配合の条件にも当てはまるように見えます（参考）</span>' : '') +
+      '</button></li>';
+  });
+  html += '</ul></div>';
+  return html;
+}
+/* ペアのボタンに、計画フォームへセットする処理をつなぐ。 */
+function attachTheoryPairButtons(container) {
+  if (!container || !container.querySelectorAll || !lastTheoryPairs) return;
+  container.querySelectorAll('button[data-goal-pair]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var it = lastTheoryPairs.items[Number(btn.getAttribute('data-goal-pair'))];
+      if (it) setGoalPairToPlanForm(it);
+    });
+  });
+}
+/* 目標から探したペアを計画フォームの父馬・母馬にセットする。
+   セットするだけで、保存はしない。 */
+function setGoalPairToPlanForm(it) {
+  if (!it) return;
+  if (it.sire.kind === 'db') chooseStallionForPlan(it.sire.dbIndex, 'sire');
+  else chooseOwnHorseForPlan('sire', it.sire.ownId);
+  if (it.dam.kind === 'db') chooseStallionForPlan(it.dam.dbIndex, 'dam');
+  else chooseOwnHorseForPlan('dam', it.dam.ownId);
+  var msg = $('goal-msg');
+  if (msg) msg.textContent = '父馬に「' + it.sire.name + '」、母馬に「' + it.dam.name + '」を計画フォームにセットしました。計画名を入れて「計画を登録」を押すと保存されます（まだ保存していません）。';
+  var form = $('plan-form');
+  if (form && form.scrollIntoView) form.scrollIntoView();
+}
+/* 「目標から探す」の検索ボタン。面白い・よくできたは全ペア走査で
+   1秒前後かかることがあるため、先に「探しています…」を出してから
+   実行する。結果は findTheoryPairs がキャッシュする。 */
+function runGoalSearch() {
+  var sel = $('goal-theory');
+  var box = $('goal-results');
+  var msg = $('goal-msg');
+  if (!sel || !box) return;
+  if (!STALLIONS || !Array.isArray(STALLIONS.horses)) {
+    if (msg) msg.textContent = 'データベースを読み込み中です。少し待ってからもう一度押してください。';
+    return;
+  }
+  var targetKey = String(sel.value || 'miracle');
+  if (msg) msg.textContent = '探しています…';
+  setTimeout(function () {
+    var result = findTheoryPairs(targetKey);
+    lastTheoryPairs = result;
+    box.innerHTML = theoryPairsHtml(result);
+    attachTheoryPairButtons(box);
+    if (msg) {
+      msg.textContent = result.total
+        ? '「' + result.targetLabel + '」が成立するペアが' + result.total + '件見つかりました（参考・未検証）。'
+        : '「' + result.targetLabel + '」が成立するペアは見つかりませんでした（参考・未検証）。';
+    }
+  }, 30);
 }
 function updatePlanTheoryPreview() {
   var box = $('plan-theory-preview');
@@ -3522,6 +3892,7 @@ $('plan-cancel-edit').addEventListener('click', resetPlanForm);
 /* 種牡馬データベース検索：検索ボタンと、父馬・母馬名を手で直したときに
    DB選択を外す処理（手入力の名前とDBの番号が食い違わないようにする）。 */
 $('s-search').addEventListener('click', runStallionSearch);
+$('goal-search').addEventListener('click', runGoalSearch);
 /* 計画フォームの父馬・母馬欄の直接検索：入力で候補を出し直し、フォーカスで
    候補を出し、欄を離れたら少し遅らせて候補を隠す（候補の mousedown が
    先に動くようにする）。Esc でも候補を隠す。絞り込み条件の変更でも候補を

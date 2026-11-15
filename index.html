@@ -328,6 +328,26 @@
       <ul id="s-results"></ul>
       <div id="s-detail"></div>
     </section>
+    <section aria-labelledby="goal-title">
+      <h3 id="goal-title">目標から探す（配合理論・参考・未検証）</h3>
+      <p class="note">作りたい配合理論を選ぶと、その理論が成立する父馬×母馬のペアを、データベースの馬同士と自家生産馬を含む組み合わせの中から探します。ペアをタップすると、下の計画フォームの父馬・母馬にセットされます（その場では保存されません）。件数が多い理論は上位20件のみ表示します。判定はユーザー検証による推定で、配合の効果を断定するものではありません。危険な配合だけのペアは出しません。父馬・母馬の一方を決めてから探したい場合は、計画フォームで片方だけを選ぶと出る「おすすめの相手」で、目標の理論を指定して絞ることもできます。</p>
+      <div class="row">
+        <label>作りたい配合理論
+          <select id="goal-theory">
+            <option value="supreme">至高の配合</option>
+            <option value="miracle" selected>奇跡の配合</option>
+            <option value="superPerfect">超完璧な配合</option>
+            <option value="perfect">完璧な配合</option>
+            <option value="migoto">見事な配合</option>
+            <option value="omoshiroi">面白い配合</option>
+            <option value="yokudekita">よくできた配合</option>
+          </select>
+        </label>
+      </div>
+      <button type="button" id="goal-search">🔍 ペアを探す</button>
+      <p id="goal-msg" role="status"></p>
+      <div id="goal-results"></div>
+    </section>
     <form id="plan-form">
       <input type="hidden" id="plan-edit-id" value="">
       <label>計画名（必須）
