@@ -81,9 +81,10 @@ function notesContain(nw, text) {
   await sleep(100); // loadData() の fetch 完了を待つ
   const C = sandbox;
 
-  check('N00', 'ranks.json v10 と staminaDart・speedCount が読み込まれている',
-    C.RANKS && C.RANKS.version === 10 && !!(C.RANKS.measureNarrowing && C.RANKS.measureNarrowing.staminaDart) && !C.RANKS.measureNarrowing.staminaNote &&
-    !!(C.RANKS.speedCount && C.RANKS.speedCount.rates && C.RANKS.speedCount.rates['2'][0] === 60 && C.RANKS.speedCount.rates['2'][1] === 70),
+  check('N00', 'ranks.json v11 と staminaDart・speedCount・cardio が読み込まれている',
+    C.RANKS && C.RANKS.version === 11 && !!(C.RANKS.measureNarrowing && C.RANKS.measureNarrowing.staminaDart) && !C.RANKS.measureNarrowing.staminaNote &&
+    !!(C.RANKS.speedCount && C.RANKS.speedCount.rates && C.RANKS.speedCount.rates['2'][0] === 60 && C.RANKS.speedCount.rates['2'][1] === 70) &&
+    !!(C.RANKS.cardio && Array.isArray(C.RANKS.cardio.items) && C.RANKS.cardio.items.length === 3),
     'version=' + (C.RANKS && C.RANKS.version));
 
   // N01: T29相当（対象なし旧形式2件、SPとして扱う）
