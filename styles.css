@@ -67,6 +67,15 @@ ul { list-style: none; padding: 0; margin: 0; }
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 #horse-list .name, #plan-list .name { font-weight: bold; font-size: 18px; color: #cfe0ff; }
+/* 測定の進み具合の一覧：登録した馬のカードと同じ見た目にする */
+#progress-list li {
+  border: 1px solid #2c3f7d; border-radius: 20px; padding: 14px;
+  margin: 0 0 12px; background: #121830;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+#progress-list .name { font-weight: bold; font-size: 18px; color: #cfe0ff; }
+#progress-list .meta { font-size: 14px; color: #aab8dd; white-space: pre-line; }
+#progress-summary { font-size: 15px; color: #d6e6ff; }
 .badge {
   display: inline-block; font-size: 12px; font-weight: bold; line-height: 1.5;
   color: #141a05; background: #d9b45b; border-radius: 999px; padding: 1px 9px;

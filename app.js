@@ -662,6 +662,48 @@ if (stDone) return '測定済み（ST）';
 return '測定中';
 }
 
+/* ---------- 測定の進み具合（自動判定・手入力なし） ---------- */
+/* 「測定の進み具合」一覧用に、馬ごとの測定状態を既存の判定結果から決める。
+   measureBadge と同じ材料（narrowSp / narrowSpCount / narrowSt）を使うが、
+   こちらはスピード側・スタミナ側を分けて状態と要約まで返す。
+   スピード側の状態：
+   - 'count'    本数測定で候補範囲が出た（narrowSpCount の range、または
+                コメント式との重なり combined）
+   - 'comment'  コメント絞り込みだけ出た（narrowSp の range のみ）
+   - 'measuring' 記録はあるが結果がまだ出ていない
+   - 'none'     記録なし（未測定）
+   スタミナ側の状態：
+   - 'done'     ダート測定で最大ST候補が出た（narrowSt の candidates）
+   - 'measuring' / 'none' はスピード側と同じ。
+   要約の最大SP候補は combined → 本数測定 range → コメント絞り込み range の
+   優先で1つにまとめ、最大ST候補は candidates を「130/131」の形にする。
+   数値はすべてユーザー検証による推定・未確定（確定値ではない）。 */
+function measureProgress(rec, est) {
+var log = (rec && Array.isArray(rec.measureLog))? rec.measureLog: [];
+var hasLog = log.length > 0;
+var sp = { state: 'none', label: '未測定', summary: ''};
+var st = { state: 'none', label: '未測定', summary: ''};
+if (!est) return { hasLog: hasLog, sp: sp, st: st};
+var cw = est.narrowSpCount, nw = est.narrowSp, dw = est.narrowSt;
+var countRange = cw? (cw.combined || cw.range): null;
+if (countRange) {
+sp.state = 'count'; sp.label = '本数測定で候補範囲あり';
+sp.summary = '最大SP候補 ' + fmtRange(countRange);
+} else if (nw && nw.range) {
+sp.state = 'comment'; sp.label = 'コメント絞り込みのみ';
+sp.summary = '最大SP候補 ' + fmtRange(nw.range);
+} else if (hasLog) {
+sp.state = 'measuring'; sp.label = '測定中';
+}
+if (dw && dw.candidates) {
+st.state = 'done'; st.label = 'ダート測定で候補あり';
+st.summary = '最大ST候補 ' + dw.candidates[0] + '/' + dw.candidates[1];
+} else if (hasLog) {
+st.state = 'measuring'; st.label = '測定中';
+}
+return { hasLog: hasLog, sp: sp, st: st};
+}
+
 /* ---------- 保存（localStorage） ---------- */
 function loadAll() {
 try {
@@ -1618,6 +1660,43 @@ records = records.filter(function (x) { return x.id!== r.id;});
 saveAll(records); renderList();
 });
 li.appendChild(editBtn); li.appendChild(delBtn);
+ul.appendChild(li);
+});
+renderMeasureProgress();
+}
+
+/* ---------- 測定の進み具合の一覧 ---------- */
+/* 登録した全馬の測定状態を一覧表示する。状態は measureProgress で自動判定し、
+   手入力項目は増やさない。上部のまとめは「全○頭・SP測定済み○頭・
+   ST測定済み○頭・測定中○頭」（測定中＝記録はあるがスピード・スタミナとも
+   結果がまだ出ていない頭数）。行の「詳細を見る」を押すと、その馬を
+   フォームに読み込んで判定結果（詳細）を表示する（loadIntoForm の既存動作）。
+   絞り込みの数値はすべてユーザー検証による推定・未確定。 */
+function renderMeasureProgress() {
+var sumEl = $('progress-summary'), ul = $('progress-list'), emptyEl = $('progress-empty');
+if (!sumEl || !ul) return;
+var spDone = 0, stDone = 0, doing = 0;
+var rows = records.map(function (r) {
+var p = measureProgress(r, estimate(r));
+if (p.sp.state === 'count' || p.sp.state === 'comment') spDone++;
+if (p.st.state === 'done') stDone++;
+if (p.hasLog && p.sp.state === 'measuring' && p.st.state === 'measuring') doing++;
+return { rec: r, p: p};
+});
+sumEl.textContent = '全' + records.length + '頭・SP測定済み' + spDone + '頭・ST測定済み' + stDone + '頭・測定中' + doing + '頭';
+if (emptyEl) emptyEl.style.display = records.length? 'none': 'block';
+ul.innerHTML = '';
+rows.forEach(function (row) {
+var r = row.rec, p = row.p;
+var li = document.createElement('li');
+var lines = [];
+lines.push('スピード：' + p.sp.label + (p.sp.summary? '（' + p.sp.summary + '）': ''));
+lines.push('スタミナ：' + p.st.label + (p.st.summary? '（' + p.st.summary + '）': ''));
+li.innerHTML = '<p class="name">' + esc(r.name) + '</p><p class="meta">' + esc(lines.join('\n')) + '</p>';
+var btn = document.createElement('button');
+btn.type = 'button'; btn.textContent = '詳細を見る';
+btn.addEventListener('click', function () { loadIntoForm(r);});
+li.appendChild(btn);
 ul.appendChild(li);
 });
 }
