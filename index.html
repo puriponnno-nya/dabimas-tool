@@ -146,17 +146,24 @@
       <fieldset class="ml-box">
         <legend>測定メモ（絞り込み用・任意）</legend>
         <p class="note">1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れてください。入力はボタンのタップが中心です。時期・本数・ランクなどは次の記録に引き継がれるので、変わったところだけ直せば大丈夫です。スピードは測定用コメントとSPランクから候補を絞ります。スタミナはダート調教による測定法です：入厩直後のSTランクを記録し、ダート一杯を1本ずつ行って、STランクが初めて変わるまでの本数を記録すると、最大ST候補（2つ）が出ます。すべて参考・未検証で、数値は断定しません。</p>
-        <label>時期（解析日・週）
+        <p class="note">調教本数での測定（スピード本数測定・スタミナのダート測定）は入厩後の記録で行います（調教は入厩してから行うため）。段階の初期値は「入厩後」です。入厩前の状態も記録できます。</p>
+        <p class="note" id="ml-memory-note">メモリはこの馬の登録値（メモリ欄・成長タイプ）を自動で使います。測定記録ごとに選び直す必要はありません。</p>
+        <label>時期（ゲーム内の月週）
           <input id="ml-at" type="text" autocomplete="off" placeholder="例：2歳3月5週">
         </label>
-        <button type="button" id="ml-at-copy">前回の時期を使う</button>
+        <div class="stepper">
+          <button type="button" id="ml-at-minus">−1週</button>
+          <button type="button" id="ml-at-plus">＋1週</button>
+          <button type="button" id="ml-at-copy">前回から自動計算</button>
+        </div>
+        <p class="note">時期の初期値は、前回の記録から増えた調教本数に合わせて自動で進みます（調教は1週に最大2本なので、増えた本数÷2（切り上げ）週ぶん。例：前回0本・3月5週のあと累計20本なら、時期は10週先になります）。月は5週までで、5週の次は翌月の1週です。ボタンや手入力で直せます。日付（記録した日）は当日の日付が自動で入るので、入力は要りません。</p>
         <p class="ml-label">段階</p>
         <div class="btn-group" id="ml-stage-group">
           <button type="button" data-val="">未入力</button>
           <button type="button" data-val="入厩前">入厩前</button>
           <button type="button" data-val="入厩後">入厩後</button>
         </div>
-        <input type="hidden" id="ml-stage" value="">
+        <input type="hidden" id="ml-stage" value="入厩後">
         <p class="ml-label">対象</p>
         <div class="btn-group" id="ml-target-group">
           <button type="button" data-val="スピード">スピード</button>

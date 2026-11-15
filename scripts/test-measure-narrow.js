@@ -322,6 +322,23 @@ function notesContain(nw, text) {
   ] }));
   check('N26', 'ダート一杯ではSP本数測定は出ない', est.narrowSpCount === null, JSON.stringify(est.narrowSpCount));
 
+  // N27: 時期（ゲーム内の月週）の週加減。5週の次は翌月1週、12月5週の次は翌年1月1週
+  check('N27', '3月5週＋1週＝4月1週', C.shiftPeriodText('0歳3月5週', 1) === '0歳4月1週');
+  check('N27b', '3月5週＋10週＝5月5週', C.shiftPeriodText('0歳3月5週', 10) === '0歳5月5週');
+  check('N27c', '12月5週＋1週＝翌年1月1週', C.shiftPeriodText('2歳12月5週', 1) === '3歳1月1週');
+  check('N27d', '4月1週−1週＝3月5週', C.shiftPeriodText('0歳4月1週', -1) === '0歳3月5週');
+  check('N27e', '読めない時期は null', C.shiftPeriodText('不明', 1) === null && C.shiftPeriodText('', 1) === null);
+
+  // N28: 増えた本数→進める週数（調教は1週に最大2本、切り上げ）
+  check('N28', '増えた本数から進める週数',
+    C.weeksForAddedCount(0) === 0 && C.weeksForAddedCount(1) === 1 && C.weeksForAddedCount(2) === 1 &&
+    C.weeksForAddedCount(3) === 2 && C.weeksForAddedCount(20) === 10);
+
+  // N29: 日付は自動で入る（YYYY-MM-DD）。記録の date は文字列のみ可
+  check('N29', 'todayText は YYYY-MM-DD 形式', /^\d{4}-\d{2}-\d{2}$/.test(C.todayText()));
+  check('N29b', 'date 文字列つきの記録は可', vr([{ stage: '入厩後', date: '2026-11-15' }]) === true);
+  check('N29c', 'date の数値は不可', vr([{ stage: '入厩後', date: 20261115 }]) === false);
+
   console.log('---');
   console.log('PASS ' + pass + ' / FAIL ' + fail);
   process.exit(fail ? 1 : 0);

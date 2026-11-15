@@ -1256,6 +1256,23 @@ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]
 function updateGrowthBar() {
   var el = $('growth-bar');
   if (el) el.textContent = '成長タイプ：' + growthDisplay(currentFormRecord());
+  updateMlMemoryNote();
+}
+/* 測定メモで使うメモリは、その馬の登録値（メモリ欄・成長タイプ）から自動で取る。
+   測定記録ごとに入力する欄はなく、絞り込み計算も馬の登録値を使っている。
+   ここでは、そのことを測定メモ欄の注記に表示する。 */
+function horseMemoryNum() {
+  var mn = parseInt($('f-memory').value, 10);
+  if (mn >= 1 && mn <= 6) return mn;
+  return growthNumOf(currentFormRecord());
+}
+function updateMlMemoryNote() {
+  var el = $('ml-memory-note');
+  if (!el) return;
+  var n = horseMemoryNum();
+  el.textContent = n
+    ? 'メモリはこの馬の登録値（メモリ' + n + '）を自動で使います。測定記録ごとに選び直す必要はありません。'
+    : 'メモリはこの馬の登録値（メモリ欄・成長タイプ）を自動で使います。測定記録ごとに選び直す必要はありません。';
 }
 function renderResult(rec) {
 var box = $('result');
@@ -1315,7 +1332,7 @@ dw.notes.forEach(function (n) { html += '<p class="note">' + esc(n) + '</p>';});
 /* 測定メモの一覧（入厩前／入厩後の記録。調教本数・変わった内容つき） */
 if (rec.measureLog && rec.measureLog.length) {
   html += '<h3>測定メモ（調教の記録）</h3><ul>' + rec.measureLog.map(function (e) {
-    return '<li>' + esc([e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), e.trainingType || '', (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</li>';
+    return '<li>' + esc([e.date, e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), e.trainingType || '', (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</li>';
   }).join('') + '</ul>';
 }
 }
@@ -1397,6 +1414,59 @@ manual: pendingManual.slice()
 /* 1件目は入厩前（または入厩後・未調教）の状態、2件目以降は調教した結果を入れる。
    「変わった内容」は、コメント変化／スペースあり／ランク変化／その他から選ぶ。
    測定メモは記録だけで、数値測定の機能ではない。古いレコード（測定メモなし）も読める。 */
+/* 記録した日（その日の日付）を YYYY-MM-DD で返す。測定メモの日付は手入力せず、
+   追加した日に自動で入れる。 */
+function todayText() {
+  var d = new Date();
+  var m = d.getMonth() + 1, day = d.getDate();
+  return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+}
+/* 時期（ゲーム内の月週。例：2歳3月5週）の読み書きと週の加減。
+   1か月は5週までで、5週の次は翌月の1週、12月5週の次は翌年の1月1週。
+   読めない文字列は null を返す（その場合は自動計算しない）。 */
+function parsePeriodText(s) {
+  var m = /^(\d+)歳(\d+)月(\d+)週$/.exec(String(s || '').trim());
+  if (!m) return null;
+  var age = parseInt(m[1], 10), month = parseInt(m[2], 10), week = parseInt(m[3], 10);
+  if (month < 1 || month > 12 || week < 1 || week > 5) return null;
+  return { age: age, month: month, week: week };
+}
+function formatPeriodText(p) { return p.age + '歳' + p.month + '月' + p.week + '週'; }
+function shiftPeriodText(s, deltaWeeks) {
+  var p = parsePeriodText(s);
+  if (!p) return null;
+  var total = (p.age * 12 + (p.month - 1)) * 5 + (p.week - 1) + deltaWeeks;
+  if (total < 0) return null;
+  var rem = total % 60;
+  return formatPeriodText({ age: Math.floor(total / 60), month: Math.floor(rem / 5) + 1, week: (rem % 5) + 1 });
+}
+/* 調教は1週に最大2本。増えた本数から進める週数（切り上げ）。 */
+function weeksForAddedCount(added) {
+  if (!added || added <= 0) return 0;
+  return Math.ceil(added / 2);
+}
+/* 時期の自動計算の基準（前回の記録の時期と累計本数）。
+   フォームの累計本数が基準より増えた分だけ、時期の初期値を進める。
+   あくまで初期値で、ボタンや手入力で直したら、その値を次の基準にする。 */
+var mlPeriodBase = null;
+function mlPeriodSuggestion() {
+  if (!mlPeriodBase || !mlPeriodBase.at) return null;
+  var cur = parseTrainingCount($('ml-training').value);
+  var added = (cur === null || mlPeriodBase.count === null || mlPeriodBase.count === undefined) ? 0 : Math.max(0, cur - mlPeriodBase.count);
+  return shiftPeriodText(mlPeriodBase.at, weeksForAddedCount(added));
+}
+function applyMlPeriodSuggestion() {
+  var s = mlPeriodSuggestion();
+  if (s) $('ml-at').value = s;
+}
+function setMlPeriodBaseFromLast() {
+  if (pendingMeasureLog.length) {
+    var last = pendingMeasureLog[pendingMeasureLog.length - 1];
+    mlPeriodBase = { at: last.at || '', count: (last.trainingCount === undefined ? null : last.trainingCount) };
+  } else {
+    mlPeriodBase = null;
+  }
+}
 function renderMeasureLogList() {
   var box = $('ml-list');
   if (!box) return;
@@ -1405,7 +1475,7 @@ function renderMeasureLogList() {
   pendingMeasureLog.forEach(function (e, idx) {
     var div = document.createElement('div');
     div.className = 'manual-row';
-    div.innerHTML = '<p>' + esc([e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), e.trainingType || '', (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</p>';
+    div.innerHTML = '<p>' + esc([e.date, e.at, e.stage, (e.target === 'スタミナ'? '対象：スタミナ': '対象：スピード'), (e.trainingCount === null || e.trainingCount === undefined ? '' : '調教' + e.trainingCount + '本'), e.trainingType || '', (e.spRank ? 'SP ' + e.spRank : ''), (e.stRank ? 'ST ' + e.stRank : ''), e.measure || '', e.changed || '', e.note || ''].filter(function (x) { return x; }).join('／')) + '</p>';
     var del = document.createElement('button');
     del.type = 'button'; del.textContent = 'この測定メモを削除'; del.className = 'danger';
     del.addEventListener('click', function () { pendingMeasureLog.splice(idx, 1); renderMeasureLogList(); renderResult(currentFormRecord()); });
@@ -1415,6 +1485,7 @@ function renderMeasureLogList() {
 }
 function addMeasureLogEntry() {
   var entry = {
+    date: todayText(),
     at: $('ml-at').value.trim(),
     stage: $('ml-stage').value,
  target: $('ml-target').value || 'スピード',
@@ -1426,7 +1497,7 @@ function addMeasureLogEntry() {
     changed: $('ml-changed').value || '',
     note: $('ml-note').value.trim()
   };
-  if (!entry.stage && entry.trainingCount === null && !entry.spRank && !entry.stRank && !entry.measure && !entry.changed && !entry.note && !entry.at && !entry.trainingType) {
+  if (entry.trainingCount === null && !entry.spRank && !entry.stRank && !entry.measure && !entry.changed && !entry.note && !entry.at && !entry.trainingType) {
     $('ml-msg').textContent = '測定メモが空です。何か1つ入れてください。';
     return;
   }
@@ -1435,9 +1506,12 @@ function addMeasureLogEntry() {
      次の記録に引き継ぐ（変わった内容とメモだけ消す）。段階が「入厩前」だった
      場合は、次は「入厩後」を初期値にする。 */
   if (entry.stage === '入厩前') $('ml-stage').value = '入厩後';
+  /* 時期の自動計算の基準を、追加した記録に合わせ直す。累計本数は引き継がれる
+     ので、次回の時期の初期値はこの記録の時期から、増えた本数ぶん進む。 */
+  mlPeriodBase = { at: entry.at, count: entry.trainingCount };
   $('ml-changed').value = ''; $('ml-note').value = '';
   syncAllBtnGroups();
-  $('ml-msg').textContent = pendingMeasureLog.length + '件目の測定メモを追加しました。時期・本数・ランクなどは次の記録に引き継いでいます。';
+  $('ml-msg').textContent = pendingMeasureLog.length + '件目の測定メモを追加しました。日付は今日の日付を自動で入れています。時期・本数・ランクなどは次の記録に引き継いでいます（時期は増えた本数に合わせて進みます）。';
   renderMeasureLogList();
   renderResult(currentFormRecord());
 }
@@ -2700,6 +2774,13 @@ $('f-memo').value = r.memo || '';
 pendingManual = (r.manual || []).slice();
 pendingMeasureLog = (r.measureLog || []).slice();
 renderMeasureLogList();
+/* 測定メモ追加の初期値：段階は「入厩後」、時期と累計本数は前回の記録から
+   引き継ぎ、時期は増えた本数に合わせて進める。 */
+$('ml-stage').value = '入厩後';
+setMlPeriodBaseFromLast();
+if (mlPeriodBase && mlPeriodBase.count !== null && mlPeriodBase.count !== undefined) $('ml-training').value = String(mlPeriodBase.count);
+applyMlPeriodSuggestion();
+syncAllBtnGroups();
 $('save-btn').textContent = '判定して更新';
 $('cancel-edit').hidden = false;
 updateGrowthBar();
@@ -2711,6 +2792,7 @@ $('edit-id').value = '';
 $('horse-form').reset();
 pendingManual = [];
 pendingMeasureLog = [];
+mlPeriodBase = null;
 renderMeasureLogList();
 syncAllBtnGroups();
 $('ml-msg').textContent = '';
@@ -2764,7 +2846,10 @@ function setTrainingCount(n) {
   if (n === null || n === undefined || isNaN(n)) n = 0;
   if (n < 0) n = 0;
   $('ml-training').value = String(n);
+  /* 本数が増えたら、時期の初期値も合わせて進める（1週に最大2本）。 */
+  applyMlPeriodSuggestion();
 }
+if ($('ml-training')) $('ml-training').addEventListener('input', applyMlPeriodSuggestion);
 if ($('ml-training-minus')) $('ml-training-minus').addEventListener('click', function () {
   var v = parseTrainingCount($('ml-training').value);
   setTrainingCount((v === null ? 0 : v) - 1);
@@ -2777,7 +2862,22 @@ if ($('ml-training-chips')) $('ml-training-chips').querySelectorAll('button[data
   b.addEventListener('click', function () { setTrainingCount(parseInt(b.getAttribute('data-count'), 10)); });
 });
 if ($('ml-at-copy')) $('ml-at-copy').addEventListener('click', function () {
-  if (pendingMeasureLog.length) $('ml-at').value = pendingMeasureLog[pendingMeasureLog.length - 1].at || '';
+  /* 前回の記録を基準に、増えた本数ぶん進めた時期を入れ直す。 */
+  setMlPeriodBaseFromLast();
+  applyMlPeriodSuggestion();
+});
+function shiftMlAt(delta) {
+  var s = shiftPeriodText($('ml-at').value, delta);
+  if (!s) return;
+  $('ml-at').value = s;
+  /* ボタンで直した時期を、次の自動計算の基準にする。 */
+  mlPeriodBase = { at: s, count: parseTrainingCount($('ml-training').value) };
+}
+if ($('ml-at-minus')) $('ml-at-minus').addEventListener('click', function () { shiftMlAt(-1); });
+if ($('ml-at-plus')) $('ml-at-plus').addEventListener('click', function () { shiftMlAt(1); });
+if ($('ml-at')) $('ml-at').addEventListener('input', function () {
+  /* 手入力で直した時期を、次の自動計算の基準にする。 */
+  mlPeriodBase = { at: $('ml-at').value.trim(), count: parseTrainingCount($('ml-training').value) };
 });
 
 /* 繁殖計画の登録・編集（ステップ1）。父馬・母馬は名前のテキスト入力のみ。 */
@@ -3265,6 +3365,7 @@ if (e.target && MEASURE_TARGETS.indexOf(e.target) < 0) return false;
 if (e.trainingType && MEASURE_TRAINING_TYPES.indexOf(e.trainingType) < 0) return false;
 if (e.changed && MEASURE_CHANGE_KINDS.indexOf(e.changed) < 0) return false;
 if (e.at !== undefined && typeof e.at !== 'string') return false;
+if (e.date !== undefined && typeof e.date !== 'string') return false;
 if (e.note !== undefined && typeof e.note !== 'string') return false;
 }
 }
