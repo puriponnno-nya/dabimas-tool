@@ -270,14 +270,20 @@ function htmlContains(el, text) {
       return r.anyHit === false && r.dangerous.hit === true &&
         html.includes('当てはまるプラスの配合理論はありませんでしたが、危険な配合の条件に当てはまるように見えます');
     })());
-  check('M44', '至高の配合は判定せず、ver.5.0.0の追加が注記される',
-    C.buildChildPedigreeHtml(sire0, dam3).includes('至高の配合：未確認です') &&
-    C.buildChildPedigreeHtml(sire0, dam3).includes('ver.5.0.0（2025-10-29）'));
+  check('M44', '至高の配合：実レコード2頭では不成立で、その旨と公式の追加（ver.5.0.0）が表示される',
+    (() => {
+      const r = C.checkMatingTheories(sire0, dam3);
+      const html = C.buildChildPedigreeHtml(sire0, dam3);
+      return r.supreme.hit === false &&
+        html.includes('至高の配合：当てはまりません') &&
+        html.includes('ver.5.0.0（2025-10-29）');
+    })());
   check('M45', '表示：新しい4理論の出典が表示される',
     (() => {
       const html = C.buildChildPedigreeHtml(sire0, dam3);
       return html.includes('超完璧な配合') && html.includes('奇跡の配合') &&
-        html.includes('るんば') && html.includes('イッコ牧場') && html.includes('Gamerch');
+        html.includes('るんば') && html.includes('イッコ牧場') && html.includes('Gamerch') &&
+        html.includes('ぐー牧場') && html.includes('トニー');
     })());
 
   // --- M: 奇跡の配合の実例（ギルデッドタイム×サクラクレアー→オルフェーヴル／ドリームジャーニー） ---
@@ -326,6 +332,60 @@ function htmlContains(el, text) {
     C.checkMatingTheories(orfe, damLegacy).miracle.hit === true &&
     C.checkMatingTheories(dream, damLegacy).miracle.hit === true,
     damLegacy ? JSON.stringify(damLegacy.anc[0]) : 'damLegacy is null');
+
+  // --- M: 至高の配合（3×4×5クロス＋因子6種類以上、配置は確認済みの2通りだけ） ---
+  // パターンA：母側3代前（母父父＝母馬 anc[1]）＋父側4代前（父父父父＝父馬 anc[2]）＋父側5代前（父父父父父＝父馬 anc[3]）
+  const sireSupA = fakeHorse('父テスト馬', {}, { 2: '至高テスト馬', 3: '至高テスト馬' }, { 2: ['短', '速'], 3: ['底', '堅'] });
+  const damSupA = fakeHorse('母テスト馬', {}, { 1: '至高テスト馬' }, { 1: ['走', '長'] });
+  check('M50', '至高の配合：パターンA（母3＋父4＋父5）で因子6種類なら成立し、根拠（出現箇所・因子）が表示される',
+    (() => {
+      const r = C.checkMatingTheories(sireSupA, damSupA);
+      const html = C.buildChildPedigreeHtml(sireSupA, damSupA);
+      const labels = r.supreme.occurrences.map((o) => o.label);
+      return r.supreme.hit === true && r.supreme.pattern === 'A' &&
+        r.supreme.name === '至高テスト馬' && r.supreme.factorCount === 6 &&
+        labels.includes('母父父') && labels.includes('父父父父') && labels.includes('父父父父父') &&
+        html.includes('至高の配合：当てはまるように見えます（参考）') &&
+        html.includes('母側3代前＋父側4代前＋父側5代前') &&
+        html.includes('全兄弟・全姉妹が父母の5代血統内に入ると不成立との報告がありますが、血統データだけでは全兄弟かどうか判定できない');
+    })());
+  // パターンB：父側3代前（父母父＝父馬 anc[8]）＋母側4代前（母父父父＝母馬 anc[2]）＋母側5代前（母母父父父＝母馬 anc[10]）
+  const sireSupB = fakeHorse('父テスト馬', {}, { 8: '至高テスト馬' }, { 8: ['走', '短'] });
+  const damSupB = fakeHorse('母テスト馬', {}, { 2: '至高テスト馬', 10: '至高テスト馬' }, { 2: ['長', '速'], 10: ['底', '堅'] });
+  check('M51', '至高の配合：パターンB（父3＋母4＋母5）で因子6種類なら成立',
+    (() => {
+      const r = C.checkMatingTheories(sireSupB, damSupB);
+      return r.supreme.hit === true && r.supreme.pattern === 'B' && r.supreme.factorCount === 6;
+    })());
+  // 配置は合うが因子が5種類（重複あり）→不成立（nearMiss）
+  const sireSupNear = fakeHorse('父テスト馬', {}, { 2: '至高テスト馬', 3: '至高テスト馬' }, { 2: ['長', '速'], 3: ['底', '堅'] });
+  const damSupNear = fakeHorse('母テスト馬', {}, { 1: '至高テスト馬' }, { 1: ['走', '長'] });
+  check('M52', '至高の配合：配置が合っても因子が5種類なら不成立で、その旨が表示される',
+    (() => {
+      const r = C.checkMatingTheories(sireSupNear, damSupNear);
+      const html = C.buildChildPedigreeHtml(sireSupNear, damSupNear);
+      return r.supreme.hit === false && !!r.supreme.nearMiss && r.supreme.factorCount === 5 &&
+        html.includes('至高の配合：当てはまりません') && html.includes('6種類以上という参考条件に届きません');
+    })());
+  // 未確認の割り振り（父3＋父4＋母5）→判定しない（crossOnly）
+  const sireSupX = fakeHorse('父テスト馬', {}, { 1: '至高テスト馬', 2: '至高テスト馬' }, { 1: ['走', '長'], 2: ['短', '速'] });
+  const damSupX = fakeHorse('母テスト馬', {}, { 3: '至高テスト馬' }, { 3: ['底', '堅'] });
+  check('M53', '至高の配合：3・4・5代に同じ馬がいても、配置が確認済みの2通りでなければ判定しない',
+    (() => {
+      const r = C.checkMatingTheories(sireSupX, damSupX);
+      const html = C.buildChildPedigreeHtml(sireSupX, damSupX);
+      return r.supreme.hit === false && !r.supreme.nearMiss && !!r.supreme.crossOnly &&
+        r.supreme.crossOnly.name === '至高テスト馬' &&
+        html.includes('配置が確認済みの2通り') && html.includes('ではないため判定しません');
+    })());
+  // 名前の正規化（年号違い・因名違いを同一視）
+  const sireSupN = fakeHorse('父テスト馬', {}, { 2: '至高テスト馬-翔瑚-', 3: '至高テスト馬' }, { 2: ['短', '速'], 3: ['底', '堅'] });
+  const damSupN = fakeHorse('母テスト馬', {}, { 1: '至高テスト馬1992' }, { 1: ['走', '長'] });
+  check('M54', '至高の配合：年号違い・因名違いの表記でも同じ種牡馬として判定する',
+    (() => {
+      const r = C.checkMatingTheories(sireSupN, damSupN);
+      return r.supreme.hit === true && r.supreme.name === '至高テスト馬' && r.supreme.pattern === 'A';
+    })());
 
   // --- M: どの理論も成立しない組み合わせ ---
   const sireNone = fakeHorse('父テスト馬', { 0: 'A', 4: 'A', 5: 'A', 7: 'A', 8: 'A', 11: 'A', 12: 'A', 14: 'A' });

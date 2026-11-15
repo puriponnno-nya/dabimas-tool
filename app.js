@@ -1732,8 +1732,23 @@ function distinctKinds(list) {
      ため、兄弟クロス（異なる馬同士の全兄弟）は分からず、その限界を注記する。
      牝馬クロスが4代前でも無効という出典もあるが、祖先の性別データがないため
      判定できず、注記する。因子別の効果数値は表示しない。
-   至高の配合：この機能では判定しない（未確認）。ver.5.0.0（2025-10-29）の
-     更新情報に「配合理論『至高の配合』を追加しました」とあることは注記する。
+   至高の配合（2026-11-15 Perplexity調査で追加）：同じ種牡馬の3×4×5クロスで、
+     そのクロスを構成する出現箇所の因子が6種類以上（6個以上ではない）。
+     因子は血統表全体ではなく、クロスを構成する出現箇所の因子だけを数える。
+     配置は確認済みの2通りだけを判定対象とする：母側3代前＋父側4代前＋
+     父側5代前（ぐー牧場 2025-11-09）、父側3代前＋母側4代前＋母側5代前
+     （ぐー牧場 2025-11-11）。それ以外の割り振りは未確認として判定しない。
+     名前は正規化して比べる（因名違い・年号違いを同一視する）。因子は、
+     名前がDBの記録と一致する場合はその記録の因子1〜3を、一致しなければ
+     出現箇所に記録された因子1・2を使う。血統データに残っている因子だけ
+     で数えるため、実際の因子が記録にない場合は数えられない限界がある。
+     対象種牡馬の全兄弟・全姉妹が父母の5代血統内に入ると不成立との報告が
+     あるが、血統データだけでは全兄弟かどうか判定できないため注記に留める。
+     効果は未解明（因子に応じた加算説・ふふ牧場、調査中と、成立だけの
+     一律ボーナスは無い説・トニー）で食い違うため、数値は表示しない。
+     存在自体は公式で、ver.5.0.0（2025-10-29）で追加され、ver.5.2.0
+     （2026-04-23）の更新履歴に「丈夫因子について、至高・奇跡の配合で
+     能力が上昇するよう変更」とある。条件の数値を公開した公式資料はない。
    危険な配合（ステップ6で追加）：1×Nおよび2×2のクロスが発生すると危険な
      配合になる。1×N：父馬名または母馬名そのものが相手方の血統に出る場合。
      2×2：父方2代（父父）と母方2代（母父）に同じ祖先が出る場合。父母・母母の
@@ -1787,6 +1802,101 @@ function checkDangerous(sire, dam) {
   });
   return { hit: details.length > 0, details: details };
 }
+/* 子の5代血統の全出現箇所（父馬・母馬それぞれの anc 15件を、子から見た
+   位置に直したもの）。返り値は [{name, label, side, gen, factors}]。
+   side は 'sire'／'dam'、gen は子から見た代数（2〜5）。
+   label は子から見た血統位置（例：父父父、母母父）。
+   factors は、その出現箇所の因子。名前がDBの記録と完全一致する場合は
+   その記録の因子1〜3を、一致しなければ出現箇所に記録された因子1・2を
+   使う。至高の配合の判定に使う。 */
+function foalAncestorOccurrences(sire, dam) {
+  var nameToIdx = stallionNameToIndex();
+  var out = [];
+  function addSide(h, side) {
+    if (!h) return;
+    var prefix = side === 'sire' ? '父' : '母';
+    for (var i = 0; i < 15; i++) {
+      var a = stallionAncestor(h, i);
+      if (!a.name) continue;
+      var factors;
+      var idx = nameToIdx[a.name];
+      if (idx !== undefined && STALLIONS && STALLIONS.horses[idx]) {
+        var rec = STALLIONS.horses[idx];
+        factors = distinctKinds([rec.f1, rec.f2, rec.f3]);
+      } else {
+        factors = distinctKinds([a.f1, a.f2]);
+      }
+      out.push({ name: a.name, label: prefix + CHILD_PEDIGREE_LABELS[i], side: side, gen: CHILD_PEDIGREE_GEN[i] + 1, factors: factors });
+    }
+  }
+  addSide(sire, 'sire');
+  addSide(dam, 'dam');
+  return out;
+}
+/* 至高の配合の判定（すべて参考・未検証。断定しない）。
+   同じ種牡馬（名前は正規化して比べる）が、子の5代血統の3代前・4代前・
+   5代前に現れ、配置が確認済みの2通り（A：母側3代前＋父側4代前＋父側
+   5代前／B：父側3代前＋母側4代前＋母側5代前）のどちらかで、その配置を
+   構成する出現箇所の因子の種類（重複を除く）が6種類以上なら成立とする。
+   返り値は {hit, name, pattern, occurrences, factorKinds, factorCount,
+   nearMiss, crossOnly}。nearMiss は配置は合うが因子が6種類に届かない
+   場合、crossOnly は3・4・5代に同じ馬はいるが配置が確認済みの2通り
+   ではない場合（未確認のため判定しない）。 */
+function checkSupreme(sire, dam) {
+  var occ = foalAncestorOccurrences(sire, dam);
+  var groups = {};
+  occ.forEach(function (o) {
+    var key = normalizeCrossName(o.name);
+    if (!key) return;
+    (groups[key] = groups[key] || []).push(o);
+  });
+  var best = null, nearMiss = null, crossOnly = null;
+  Object.keys(groups).forEach(function (key) {
+    var list = groups[key].filter(function (o) { return o.gen >= 3 && o.gen <= 5; });
+    function has(side, gen) {
+      return list.some(function (o) { return o.side === side && o.gen === gen; });
+    }
+    function hasGen(gen) { return has('sire', gen) || has('dam', gen); }
+    if (!hasGen(3) || !hasGen(4) || !hasGen(5)) return;
+    var patternA = has('dam', 3) && has('sire', 4) && has('sire', 5);
+    var patternB = has('sire', 3) && has('dam', 4) && has('dam', 5);
+    if (!patternA && !patternB) {
+      if (!crossOnly) crossOnly = { name: key };
+      return;
+    }
+    var slots = list.filter(function (o) {
+      if (patternA && ((o.side === 'dam' && o.gen === 3) || (o.side === 'sire' && (o.gen === 4 || o.gen === 5)))) return true;
+      if (patternB && ((o.side === 'sire' && o.gen === 3) || (o.side === 'dam' && (o.gen === 4 || o.gen === 5)))) return true;
+      return false;
+    });
+    var kinds = distinctKinds([].concat.apply([], slots.map(function (o) { return o.factors; })));
+    var cand = {
+      name: key,
+      pattern: (patternA && patternB) ? 'AB' : (patternA ? 'A' : 'B'),
+      occurrences: slots,
+      factorKinds: kinds,
+      factorCount: kinds.length
+    };
+    if (kinds.length >= 6) {
+      if (!best || cand.factorCount > best.factorCount) best = cand;
+    } else if (!nearMiss || cand.factorCount > nearMiss.factorCount) {
+      nearMiss = cand;
+    }
+  });
+  if (best) {
+    return { hit: true, name: best.name, pattern: best.pattern, occurrences: best.occurrences, factorKinds: best.factorKinds, factorCount: best.factorCount, nearMiss: null, crossOnly: null };
+  }
+  return {
+    hit: false,
+    name: nearMiss ? nearMiss.name : (crossOnly ? crossOnly.name : ''),
+    pattern: nearMiss ? nearMiss.pattern : '',
+    occurrences: nearMiss ? nearMiss.occurrences : [],
+    factorKinds: nearMiss ? nearMiss.factorKinds : [],
+    factorCount: nearMiss ? nearMiss.factorCount : 0,
+    nearMiss: nearMiss,
+    crossOnly: crossOnly
+  };
+}
 function checkMatingTheories(sire, dam) {
   if (!sire || !dam) return null;
   function paList(h, idxs) { return idxs.map(function (i) { return stallionAncestor(h, i).pa; }); }
@@ -1803,6 +1913,7 @@ function checkMatingTheories(sire, dam) {
   var superPerfect = migoto && eightKinds.length === 8;
   var miracleCross = checkMiracleCross(sire, dam);
   var miracle = perfect && miracleCross.hit;
+  var supreme = checkSupreme(sire, dam);
   var dangerous = checkDangerous(sire, dam);
   return {
     omoshiroi: { hit: omoshiroi, distinctCount: eightKinds.length, kinds: eightKinds },
@@ -1812,8 +1923,9 @@ function checkMatingTheories(sire, dam) {
     perfectLookalike: perfect,
     superPerfect: { hit: superPerfect, distinctCount: eightKinds.length, kinds: eightKinds },
     miracle: { hit: miracle, cross: miracleCross },
+    supreme: supreme,
     dangerous: dangerous,
-    anyHit: omoshiroi || migoto || yokudekita || perfect || superPerfect || miracle
+    anyHit: omoshiroi || migoto || yokudekita || perfect || superPerfect || miracle || supreme.hit
   };
 }
 /* ---------- 配合理論のプレビュー（保存前） ---------- */
@@ -1850,7 +1962,20 @@ function matingTheorySummaryHtml(th) {
   } else {
     html += '<li>奇跡の配合：当てはまりません — 完璧な配合は成立していますが、種牡馬側4代前と繁殖牝馬側3代前（母母父）に同じ祖先がいる4×3のクロスは見つかりませんでした（参考）。名前の一致だけで判定しています。</li>';
   }
-  html += '<li>至高の配合：未確認です。この機能では判定しません。「同一の種牡馬で3×4×5のクロス、因子6種類以上」という核はありますが、「因子6種類以上」の数える範囲と3・4・5代の割り振りが出典で明示されておらず、効果も出典間で矛盾しているため判定しません。存在自体は公式で、ver.5.0.0（2025-10-29）の更新情報に「配合理論『至高の配合』を追加しました」とあります。</li>';
+  if (th.supreme && th.supreme.hit) {
+    var supOccText = th.supreme.occurrences.map(function (o) {
+      return esc(o.label) + '「' + esc(o.name) + '」' + (o.factors.length ? '（因子：' + esc(o.factors.join('・')) + '）' : '（因子は血統データに記録なし）');
+    }).join('／');
+    var supPatternText = th.supreme.pattern === 'A' ? '母側3代前＋父側4代前＋父側5代前'
+      : (th.supreme.pattern === 'B' ? '父側3代前＋母側4代前＋母側5代前' : '母側3代前＋父側4代前＋父側5代前／父側3代前＋母側4代前＋母側5代前');
+    html += '<li>至高の配合：当てはまるように見えます（参考） — 同じ種牡馬「' + esc(th.supreme.name) + '」の3×4×5クロスがあります（配置：' + supPatternText + '）。出現箇所：' + supOccText + '。クロスを構成する因子は' + th.supreme.factorCount + '種類（' + esc(th.supreme.factorKinds.join('・')) + '）で、6種類以上という参考条件に当てはまります。因子は血統データに残っているものだけで数えています。対象種牡馬の全兄弟・全姉妹が父母の5代血統内に入ると不成立との報告がありますが、血統データだけでは全兄弟かどうか判定できないため、その点は確認できていません。効果は未解明のため、数値は表示しません。</li>';
+  } else if (th.supreme && th.supreme.nearMiss) {
+    html += '<li>至高の配合：当てはまりません — 同じ種牡馬「' + esc(th.supreme.name) + '」の3×4×5クロス（確認済みの配置）はありますが、クロスを構成する因子は' + th.supreme.factorCount + '種類（' + esc(th.supreme.factorKinds.join('・') || 'なし') + '）で、6種類以上という参考条件に届きません（参考）。因子は血統データに残っているものだけで数えています。</li>';
+  } else if (th.supreme && th.supreme.crossOnly) {
+    html += '<li>至高の配合：当てはまりません — 同じ種牡馬「' + esc(th.supreme.crossOnly.name) + '」が3代前・4代前・5代前にいますが、配置が確認済みの2通り（母側3代前＋父側4代前＋父側5代前／父側3代前＋母側4代前＋母側5代前）ではないため判定しません（参考）。それ以外の割り振りが成立するかは未確認です。</li>';
+  } else {
+    html += '<li>至高の配合：当てはまりません — 同じ種牡馬の3×4×5クロス（確認済みの配置：母側3代前＋父側4代前＋父側5代前、または父側3代前＋母側4代前＋母側5代前）は見つかりませんでした（参考）。条件はユーザー検証によるもので、公式が条件の数値を公開した資料はありません。効果は未解明のため、数値は表示しません。存在自体は公式で、ver.5.0.0（2025-10-29）で追加されました。</li>';
+  }
   if (th.dangerous.hit) {
     html += '<li>危険な配合：当てはまるように見えます（参考） — ' + th.dangerous.details.map(function (d) {
       if (d.type === '1xN') {
@@ -1980,7 +2105,7 @@ function buildChildPedigreeHtml(sire, dam) {
       return '<li>' + esc(c.name) + forms + '：' + esc(pairs) + (factors ? '（因子：' + esc(factors) + '）' : '') + '</li>';
     }).join('') + '</ul>';
   }
-  html += '<p class="note">出典（ユーザー攻略記事。公式仕様ではありません）：<a href="https://games.app-liv.jp/archives/232008" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」</a>、<a href="https://games.app-liv.jp/archives/198428" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のポイント」</a>、<a href="https://dbms-go.net/配合解説/完璧な配合/" target="_blank" rel="noopener">dbms-go.net「完璧な配合」</a>、<a href="https://dabimasu.gamerch.com/%E5%AE%8C%E7%92%A7%E3%81%AA%E9%85%8D%E5%90%88" target="_blank" rel="noopener">Gamerch「完璧な配合」</a>、<a href="https://note.com/runbarunba1218/n/n1952a2d129aa" target="_blank" rel="noopener">るんば note「超完璧・奇跡の配合」</a>、<a href="https://note.com/huh_ds/n/n0eb8a439d3f3" target="_blank" rel="noopener">ふふ牧場 note「ダビマス 備忘録」</a>、<a href="https://note.com/sashimi_sky/n/n65db77ba6661" target="_blank" rel="noopener">しまむら牧場 note「奇跡の配合」</a>、<a href="https://note.com/derbymas/n/n4352f6b2c96f" target="_blank" rel="noopener">スマイル牧場 note「奇跡の配合」</a>、<a href="https://note.com/dabimas_ikko/n/ndf3449c98068" target="_blank" rel="noopener">イッコ牧場 note「危険な配合」</a>。詳しくは docs/rules.md を見てください。</p>';
+  html += '<p class="note">出典（ユーザー攻略記事。公式仕様ではありません）：<a href="https://games.app-liv.jp/archives/232008" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のやり方と面白い配合／見事な配合／よくできた配合の条件」</a>、<a href="https://games.app-liv.jp/archives/198428" target="_blank" rel="noopener">Appliv Games「ダビマス 配合のポイント」</a>、<a href="https://dbms-go.net/配合解説/完璧な配合/" target="_blank" rel="noopener">dbms-go.net「完璧な配合」</a>、<a href="https://dabimasu.gamerch.com/%E5%AE%8C%E7%92%A7%E3%81%AA%E9%85%8D%E5%90%88" target="_blank" rel="noopener">Gamerch「完璧な配合」</a>、<a href="https://note.com/runbarunba1218/n/n1952a2d129aa" target="_blank" rel="noopener">るんば note「超完璧・奇跡の配合」</a>、<a href="https://note.com/huh_ds/n/n0eb8a439d3f3" target="_blank" rel="noopener">ふふ牧場 note「ダビマス 備忘録」</a>、<a href="https://note.com/sashimi_sky/n/n65db77ba6661" target="_blank" rel="noopener">しまむら牧場 note「奇跡の配合」</a>、<a href="https://note.com/derbymas/n/n4352f6b2c96f" target="_blank" rel="noopener">スマイル牧場 note「奇跡の配合」</a>、<a href="https://note.com/dabimas_ikko/n/ndf3449c98068" target="_blank" rel="noopener">イッコ牧場 note「危険な配合」</a>、<a href="https://www.dabimasu.work/entry/2025/11/09/124311" target="_blank" rel="noopener">ぐー牧場「至高の配合 説明編」</a>、<a href="https://www.dabimasu.work/entry/2025/11/11/185908" target="_blank" rel="noopener">ぐー牧場「至高の配合 実践編」</a>、<a href="https://appligame.xyz/dabimas/archives/47491" target="_blank" rel="noopener">Appliv Games「初めて至高の配合をやります」</a>、<a href="https://note.com/tony_marpen/n/n8da2404f3fc4" target="_blank" rel="noopener">トニー note「至高の配合」</a>。詳しくは docs/rules.md を見てください。</p>';
   html += '</details>';
   return html;
 }
@@ -1990,7 +2115,7 @@ function buildChildPedigreeHtml(sire, dam) {
    種牡馬は青系、繁殖牝馬はピンク系の箱。親から子へのつながりを
    矢印（←）で示す。各世代の配合理論は、ステップ3・6の判定
    （checkMatingTheories）から一番上のものをラベルにする。
-   優先順：奇跡＞超完璧＞完璧＞見事＞面白い＞よくできた。
+   優先順：至高＞奇跡＞超完璧＞完璧＞見事＞面白い＞よくできた。
    どれにも当てはまらなければ「配合理論なし」。
    すべて参考・未検証で、配合の効果を断定しない。
    buildRouteDiagram は表示用の純粋なデータ（DOMを使わない）で、
@@ -1999,6 +2124,7 @@ function routeTheoryLabel(sire, dam) {
   var th = checkMatingTheories(sire, dam);
   if (!th) return null;
   var hits = [];
+  if (th.supreme && th.supreme.hit) hits.push('至高の配合');
   if (th.miracle.hit) hits.push('奇跡の配合');
   if (th.superPerfect.hit) hits.push('超完璧な配合');
   if (th.perfect.hit) hits.push('完璧な配合');
